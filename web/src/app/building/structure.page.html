@@ -21,10 +21,19 @@
 
 @if (blockedDelete(); as b) {
   <div class="alert alert-warn" role="alert">
-    <strong>“{{ b.name }}” can't be deleted: it still has active assets (in it or in a space below it).</strong>
-    <p>Archive them or move them to another space first. Archived assets don't block deletion and keep their history.</p>
+    @if (b.reason === 'assets') {
+      <strong>“{{ b.name }}” can't be deleted: it still has active assets (in it or in a space below it).</strong>
+      <p>Archive them or move them to another space first. Archived assets don't block deletion and keep their history.</p>
+    } @else {
+      <strong>“{{ b.name }}” can't be deleted: it still has open issues (in it or in a space below it).</strong>
+      <p>Resolve them first. Resolved issues keep their history and location label.</p>
+    }
     <div class="row gap wrap">
-      <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'assets']" [queryParams]="{ space: b.id }">Show its assets</a>
+      @if (b.reason === 'assets') {
+        <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'assets']" [queryParams]="{ space: b.id }">Show its assets</a>
+      } @else {
+        <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'issues']" [queryParams]="{ space: b.id, view: 'triage' }">Show its issues</a>
+      }
       <button type="button" class="btn btn-sm" (click)="blockedDelete.set(null)">Dismiss</button>
     </div>
   </div>

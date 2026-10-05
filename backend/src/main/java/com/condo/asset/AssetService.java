@@ -243,13 +243,8 @@ public class AssetService {
             return SpaceService.effectiveVisibility(space, spacesById);
         }
 
-        /** "Floor 2 › 2B › Kitchen" — ancestors below the root, then the space itself. */
         String pathLabel(Space space) {
-            List<String> names = new ArrayList<>();
-            for (Space cur = space; cur != null && !cur.isRoot(); cur = space(cur.getParentId())) {
-                names.addFirst(cur.getName());
-            }
-            return names.isEmpty() ? space.getName() : String.join(" › ", names);
+            return SpaceService.pathLabel(space, spacesById);
         }
     }
 }

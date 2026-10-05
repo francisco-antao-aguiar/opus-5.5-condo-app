@@ -36,6 +36,15 @@ public final class ErrorCodes {
     public static final String ASSET_ARCHIVED = "ASSET_ARCHIVED";
     public static final String BUILT_IN_PROBLEM_TYPE = "BUILT_IN_PROBLEM_TYPE";
     public static final String DUPLICATE_PROBLEM_TYPE = "DUPLICATE_PROBLEM_TYPE";
+    public static final String DUPLICATE_ISSUE = "DUPLICATE_ISSUE";
+    public static final String INVALID_PROBLEM_TYPE = "INVALID_PROBLEM_TYPE";
+    public static final String INVALID_TRANSITION = "INVALID_TRANSITION";
+    public static final String INVALID_MERGE = "INVALID_MERGE";
+    public static final String ISSUE_MERGED = "ISSUE_MERGED";
+    public static final String SPACE_HAS_OPEN_ISSUES = "SPACE_HAS_OPEN_ISSUES";
+    public static final String PHOTO_LIMIT = "PHOTO_LIMIT";
+    public static final String FILE_TOO_LARGE = "FILE_TOO_LARGE";
+    public static final String UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
 
     private ErrorCodes() {

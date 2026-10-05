@@ -39,9 +39,29 @@ export const routes: Routes = [
         loadComponent: () => import('./building/structure.page').then((m) => m.StructurePage),
       },
       {
+        path: 'issues',
+        title: 'Issues · Condo',
+        loadComponent: () => import('./building/issues.page').then((m) => m.IssuesPage),
+      },
+      {
+        path: 'issues/new',
+        title: 'Report a problem · Condo',
+        loadComponent: () => import('./building/report-issue.page').then((m) => m.ReportIssuePage),
+      },
+      {
+        path: 'issues/:issueId',
+        title: 'Issue · Condo',
+        loadComponent: () => import('./building/issue-detail.page').then((m) => m.IssueDetailPage),
+      },
+      {
         path: 'assets',
         title: 'Assets · Condo',
         loadComponent: () => import('./building/assets.page').then((m) => m.AssetsPage),
+      },
+      {
+        path: 'catalog/other',
+        title: 'Review “Other” · Condo',
+        loadComponent: () => import('./building/other-review.page').then((m) => m.OtherReviewPage),
       },
       {
         path: 'catalog',

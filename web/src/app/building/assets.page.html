@@ -1,11 +1,12 @@
 <div class="page-head">
   <h1>Assets</h1>
+  <div class="row gap wrap">
+    <a class="btn" [routerLink]="['/buildings', ctx.buildingId(), 'issues', 'new']" [queryParams]="spaceId() ? { space: spaceId() } : {}">🚩 Report a problem</a>
   @if (canCreate()) {
-    <div class="row gap wrap">
       <button type="button" class="btn" [disabled]="!catalog().length" (click)="bulkOpen.set(true)">Add to several spaces…</button>
       <button type="button" class="btn btn-primary" [disabled]="!catalog().length" (click)="editing.set('new')">＋ Add asset</button>
-    </div>
   }
+  </div>
 </div>
 
 <p class="muted small">Lights, doors, the elevator, the boiler… Residents report problems on these. Private assets are only shown to people with access to that space.</p>
@@ -96,8 +97,11 @@
                 @if (canArchive(a)) {
                   <button type="button" class="btn btn-sm" [disabled]="!a.spaceId" [title]="a.spaceId ? '' : 'Its space was deleted'" (click)="restore(a)">Restore</button>
                 }
-              } @else if (canEdit(a)) {
-                <button type="button" class="btn btn-sm" (click)="editing.set(a)">Edit</button>
+              } @else {
+                <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'issues', 'new']" [queryParams]="{ asset: a.id }" title="Report a problem with this item">🚩 Report</a>
+                @if (canEdit(a)) {
+                  <button type="button" class="btn btn-sm" (click)="editing.set(a)">Edit</button>
+                }
               }
             </td>
           </tr>

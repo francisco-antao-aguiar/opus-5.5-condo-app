@@ -36,6 +36,7 @@ mvn spring-boot:run
 
 - API: http://localhost:8080/api · Swagger UI: http://localhost:8080/swagger-ui.html
 - The `dev` profile is the default. It enables the H2 console at http://localhost:8080/h2-console (JDBC URL `jdbc:h2:file:./data/condo`, user `sa`, no password) and seeds demo data on first start.
+- Uploaded photos go to `backend/uploads/` (`APP_STORAGE_DIR`) behind the `StorageService` interface.
 - Data lives in `backend/data/` (survives restarts). Delete that folder to reseed (needed to get new seed data after pulling).
 - Invitation links point at `APP_WEB_BASE_URL` (default `http://localhost:4200`). A scheduled job (every 15 min, `app.memberships.expiry-cron`) marks lapsed memberships EXPIRED; access is already cut at the exact end time regardless.
 - Other port: `mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=18080`
@@ -66,6 +67,17 @@ Invite codes in the seed (open `http://localhost:4200/join/<code>` or `buildinga
 
 It also has 19 assets (lobby light, door, intercom and extinguisher, the elevator, garage gate and lights, the central boiler, a stairwell light on every floor…), including private ones in 2B and the duplex that only those units and the admins see. Its problem catalog adds a custom gate problem ("Remote doesn't work") and hides the built-in "Damaged fixture" for lights.
 
+Seven sample issues show the whole lifecycle:
+
+| # | Issue | What it demonstrates |
+|---|---|---|
+| 1 | Lobby light · Flickering | 3 neighbours affected ("me too"), top of the urgency sort |
+| 2 | Elevator · Door won't close | Acknowledged → In progress, with comments in the timeline |
+| 3 | Garage gate · Remote doesn't work | Untouched for 4 days → flagged as **stuck** on the dashboard |
+| 4 | Intercom · No sound | Resolved |
+| 5 | 2B kitchen sink · Leak | **Private**: only 2B's members see it (not shared with management) |
+| 6, 7 | Roof door · "Hinge squeaks" | The same free "Other" text twice → ready to promote in the "Other" review |
+
 ## Web
 
 ```bash
@@ -92,6 +104,6 @@ The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To 
 1. **Building tree, spaces, roles, governance, auth** ✅
 2. **Invitations and membership expiry** ✅
 3. **Asset types, assets, problem catalogs** ✅
-4. Issue reporting, duplicate detection / "me too", lifecycle and timeline
+4. **Issue reporting, duplicate detection / "me too", lifecycle and timeline** ✅
 5. QR codes, deep links, push notifications
 6. Design only: maintenance, announcements, booking, costs (see DESIGN.md)

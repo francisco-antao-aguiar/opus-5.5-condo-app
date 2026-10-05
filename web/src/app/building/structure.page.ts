@@ -74,7 +74,7 @@ export class StructurePage {
   protected readonly moveFilter = signal('');
 
   /** Set after a delete was refused with SPACE_HAS_ASSETS. */
-  protected readonly blockedDelete = signal<{ id: UUID; name: string } | null>(null);
+  protected readonly blockedDelete = signal<{ id: UUID; name: string; reason: 'assets' | 'issues' } | null>(null);
 
   protected readonly wizardOpen = signal(false);
   protected readonly wizardConflict = signal(false);
@@ -281,8 +281,9 @@ export class StructurePage {
         if (cascade) await this.api.client.spaces.remove(this.bid, node.id, true);
       }
     }, `Deleted “${node.name}”`, (e) => {
-      if (errorCode(e) !== 'SPACE_HAS_ASSETS') return false;
-      this.blockedDelete.set({ id: node.id, name: node.name });
+      const code = errorCode(e);
+      if (code !== 'SPACE_HAS_ASSETS' && code !== 'SPACE_HAS_OPEN_ISSUES') return false;
+      this.blockedDelete.set({ id: node.id, name: node.name, reason: code === 'SPACE_HAS_ASSETS' ? 'assets' : 'issues' });
       return true;
     });
     if (deleted) this.openId.set(null);

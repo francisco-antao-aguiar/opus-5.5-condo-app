@@ -5,6 +5,20 @@ import type {
   AssetQuery,
   AssetTypeDto,
   BulkCreateAssetsRequest,
+  ChangeIssueStatusRequest,
+  CommentRequest,
+  IssueDashboard,
+  IssueDto,
+  IssuePhotoDto,
+  IssueQuery,
+  IssueSummaryDto,
+  MergeIssueRequest,
+  OtherTextGroup,
+  Page,
+  PromoteOtherTextRequest,
+  PromoteOtherTextResponse,
+  ReportIssueRequest,
+  SharingRequest,
   CreateAssetRequest,
   CreateProblemTypeRequest,
   ProblemTypeDto,
@@ -99,13 +113,15 @@ export function createApiClient(config: ApiClientConfig) {
 
   async function raw(method: Method, path: string, body: unknown, token: string | null): Promise<Response> {
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+    // Multipart: let fetch set the boundary header itself.
+    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
     if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
       return await doFetch(config.baseUrl + path, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       });
     } catch (e) {
       throw new NetworkError(e);
@@ -259,6 +275,42 @@ export function createApiClient(config: ApiClientConfig) {
         request<void>('DELETE', `${b(buildingId)}/assets/${assetId}`),
       restore: (buildingId: UUID, assetId: UUID) =>
         request<AssetDto>('POST', `${b(buildingId)}/assets/${assetId}/restore`),
+    },
+
+    issues: {
+      /** 409 DUPLICATE_ISSUE → error.problem.duplicate holds the open issue to "me too". */
+      report: (buildingId: UUID, req: ReportIssueRequest) =>
+        request<IssueDto>('POST', `${b(buildingId)}/issues`, req),
+      list: (buildingId: UUID, query: IssueQuery = {}) =>
+        request<Page<IssueSummaryDto>>('GET', `${b(buildingId)}/issues${toQueryString(query)}`),
+      get: (buildingId: UUID, issueId: UUID) => request<IssueDto>('GET', `${b(buildingId)}/issues/${issueId}`),
+      /** Open issues on an asset that the caller can see — show them before asking "what's wrong?". */
+      openOnAsset: (buildingId: UUID, assetId: UUID) =>
+        request<IssueSummaryDto[]>('GET', `${b(buildingId)}/assets/${assetId}/open-issues`),
+      changeStatus: (buildingId: UUID, issueId: UUID, req: ChangeIssueStatusRequest) =>
+        request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/status`, req),
+      comment: (buildingId: UUID, issueId: UUID, req: CommentRequest) =>
+        request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/comments`, req),
+      meToo: (buildingId: UUID, issueId: UUID) =>
+        request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/me-too`),
+      withdrawMeToo: (buildingId: UUID, issueId: UUID) =>
+        request<IssueDto>('DELETE', `${b(buildingId)}/issues/${issueId}/me-too`),
+      merge: (buildingId: UUID, issueId: UUID, req: MergeIssueRequest) =>
+        request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/merge`, req),
+      setSharing: (buildingId: UUID, issueId: UUID, req: SharingRequest) =>
+        request<IssueDto>('PUT', `${b(buildingId)}/issues/${issueId}/sharing`, req),
+      /**
+       * Multipart field "file". Web: form.append('file', blob, name).
+       * React Native: form.append('file', { uri, name, type } as any).
+       */
+      uploadPhoto: (buildingId: UUID, issueId: UUID, form: FormData) =>
+        request<IssuePhotoDto>('POST', `${b(buildingId)}/issues/${issueId}/photos`, form),
+      deletePhoto: (buildingId: UUID, issueId: UUID, photoId: UUID) =>
+        request<void>('DELETE', `${b(buildingId)}/issues/${issueId}/photos/${photoId}`),
+      dashboard: (buildingId: UUID) => request<IssueDashboard>('GET', `${b(buildingId)}/issues/dashboard`),
+      otherTexts: (buildingId: UUID) => request<OtherTextGroup[]>('GET', `${b(buildingId)}/issues/other-texts`),
+      promoteOtherText: (buildingId: UUID, req: PromoteOtherTextRequest) =>
+        request<PromoteOtherTextResponse>('POST', `${b(buildingId)}/issues/other-texts/promote`, req),
     },
 
     invitations: {

@@ -9,6 +9,7 @@ import {
   type SpaceDto,
 } from '@condo/shared';
 import { AssetIcon, AssetTypeGrid, AssetVisibilityBadge } from '../../../../../components/assets/AssetParts';
+import { IssueRow } from '../../../../../components/issues/IssueParts';
 import { SpacePickerSheet } from '../../../../../components/assets/SpacePickerSheet';
 import { Badge } from '../../../../../components/Badges';
 import { Button } from '../../../../../components/Button';
@@ -21,6 +22,7 @@ import {
   useAsset,
   useCatalog,
   useMyPermissions,
+  useOpenIssuesOnAsset,
   useRestoreAsset,
   useSpaces,
   useUpdateAsset,
@@ -152,7 +154,7 @@ function AssetDetail({
       <Card>
         {problems.length ? (
           <>
-            <Text style={{ color: colors.textMuted, fontSize: 15 }}>You'll be able to report:</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 15 }}>You can report:</Text>
             <View style={styles.chips}>
               {problems.map((p) => (
                 <View key={p.id} style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
@@ -165,10 +167,16 @@ function AssetDetail({
             </View>
           </>
         ) : (
-          <Text style={{ color: colors.textMuted, fontSize: 15 }}>You'll be able to describe any problem in your own words.</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 15 }}>Describe any problem in your own words.</Text>
         )}
-        <Button title="Report a problem (coming soon)" disabled />
+        <Button
+          title="Report a problem"
+          disabled={asset.archived}
+          onPress={() => router.push(`/buildings/${asset.buildingId}/report?assetId=${asset.id}`)}
+          style={{ minHeight: 64 }}
+        />
       </Card>
+      {!asset.archived ? <OpenIssues buildingId={asset.buildingId} assetId={asset.id} /> : null}
 
       <FormError message={archive.error ? errorMessage(archive.error) : restore.error ? errorMessage(restore.error) : null} />
       {canEdit ? <Button title="Edit" variant="secondary" onPress={() => setEditing(true)} /> : null}
@@ -179,6 +187,20 @@ function AssetDetail({
         <Button title="Restore" variant="secondary" onPress={() => restore.mutate(asset.id)} loading={restore.isPending} />
       ) : null}
     </ScrollScreen>
+  );
+}
+
+/** Open issues on this asset, so people see "already reported" before reporting again. */
+function OpenIssues({ buildingId, assetId }: { buildingId: string; assetId: string }) {
+  const open = useOpenIssuesOnAsset(buildingId, assetId);
+  if (!open.data?.length) return null;
+  return (
+    <>
+      <SectionTitle>Open issues</SectionTitle>
+      {open.data.map((i) => (
+        <IssueRow key={i.id} issue={i} onPress={() => router.push(`/buildings/${buildingId}/issues/${i.id}`)} />
+      ))}
+    </>
   );
 }
 

@@ -1,5 +1,6 @@
 package com.condo.common.error;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,8 @@ public class ApiException extends RuntimeException {
     private final HttpStatus status;
     private final String code;
     private final List<Map<String, String>> fieldErrors;
+    /** Extra machine-readable payload rendered as top-level problem properties (e.g. {@code duplicate}). */
+    private final Map<String, Object> properties = new LinkedHashMap<>();
 
     public ApiException(HttpStatus status, String code, String message) {
         this(status, code, message, List.of());
@@ -51,6 +54,11 @@ public class ApiException extends RuntimeException {
         return new ApiException(HttpStatus.UNAUTHORIZED, code, message);
     }
 
+    public ApiException with(String property, Object value) {
+        properties.put(property, value);
+        return this;
+    }
+
     public HttpStatus getStatus() {
         return status;
     }
@@ -61,5 +69,9 @@ public class ApiException extends RuntimeException {
 
     public List<Map<String, String>> getFieldErrors() {
         return fieldErrors;
+    }
+
+    public Map<String, Object> getProperties() {
+        return properties;
     }
 }

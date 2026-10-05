@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AssetTypeDto, ProblemTypeDto, UUID, UpdateProblemTypeRequest } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { describeError, errorCode, ErrorText } from '../core/errors';
@@ -10,9 +11,13 @@ const LABEL_MAX = 100;
 
 @Component({
   selector: 'app-catalog-page',
+  imports: [RouterLink],
   template: `
     <div class="page-head">
       <h1>Problem catalog</h1>
+      @if (canEdit()) {
+        <a class="btn" [routerLink]="['/buildings', ctx.buildingId(), 'catalog', 'other']">Review “Other” reports</a>
+      }
     </div>
     <p class="alert alert-info">
       Residents pick from these when reporting; an “Other” option is always added. Built-in problems can be hidden if they

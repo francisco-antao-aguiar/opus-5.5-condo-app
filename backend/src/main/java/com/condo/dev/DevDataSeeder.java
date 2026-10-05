@@ -13,6 +13,16 @@ import com.condo.building.BuildingRepository;
 import com.condo.governance.GovernanceMode;
 import com.condo.governance.Role;
 import com.condo.invitation.Invitation;
+import com.condo.issue.Issue;
+import com.condo.issue.IssueAffected;
+import com.condo.issue.IssueAffectedRepository;
+import com.condo.issue.IssueEvent;
+import com.condo.issue.IssueEventRepository;
+import com.condo.issue.IssueEventType;
+import com.condo.issue.IssueRepository;
+import com.condo.issue.IssueStatus;
+import com.condo.issue.OtherTexts;
+import com.condo.space.SpaceService;
 import com.condo.invitation.InvitationRepository;
 import com.condo.member.Membership;
 import com.condo.member.MembershipRepository;
@@ -25,6 +35,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,12 +70,16 @@ public class DevDataSeeder implements ApplicationRunner {
     private final AssetRepository assets;
     private final ProblemTypeRepository problemTypes;
     private final ProblemTypeHiddenRepository hiddenProblemTypes;
+    private final IssueRepository issues;
+    private final IssueAffectedRepository issueAffected;
+    private final IssueEventRepository issueEvents;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
     public DevDataSeeder(UserRepository users, BuildingRepository buildings, SpaceRepository spaces,
             MembershipRepository memberships, InvitationRepository invitations, AssetRepository assets,
             ProblemTypeRepository problemTypes, ProblemTypeHiddenRepository hiddenProblemTypes,
+            IssueRepository issues, IssueAffectedRepository issueAffected, IssueEventRepository issueEvents,
             PasswordEncoder passwordEncoder, Clock clock) {
         this.users = users;
         this.buildings = buildings;
@@ -72,6 +89,9 @@ public class DevDataSeeder implements ApplicationRunner {
         this.assets = assets;
         this.problemTypes = problemTypes;
         this.hiddenProblemTypes = hiddenProblemTypes;
+        this.issues = issues;
+        this.issueAffected = issueAffected;
+        this.issueEvents = issueEvents;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
     }
@@ -164,8 +184,44 @@ public class DevDataSeeder implements ApplicationRunner {
         assets.saveAll(items);
 
         // Building-specific catalog: an extra gate problem, and a built-in this building doesn't want offered.
-        problemTypes.save(ProblemType.custom(a, "GATE", "Remote doesn't work", 10));
+        ProblemType remote = problemTypes.save(ProblemType.custom(a, "GATE", "Remote doesn't work", 10));
         hiddenProblemTypes.save(new ProblemTypeHidden(a, UUID.fromString("00000000-0000-0000-0001-000000000004")));
+
+        // ---------- Sample issues ----------
+        Map<String, Asset> byName = items.stream().collect(Collectors.toMap(Asset::getName, Function.identity(),
+                (x, y) -> x));
+        Map<UUID, Space> spaceIndex = s.stream().collect(Collectors.toMap(Space::getId, Function.identity()));
+        Instant t = clock.instant();
+        Issue lobbyLight = issue(aurora, byName.get("Lobby ceiling light"), spaceIndex, LIGHT_FLICKERING, null,
+                "Worse in the evening", tenant, t.minus(Duration.ofHours(30)));
+        meToo(lobbyLight, owner, t.minus(Duration.ofHours(20)));
+        meToo(lobbyLight, owner2, t.minus(Duration.ofHours(5)));
+
+        Issue elevator = issue(aurora, byName.get("Elevator"), spaceIndex, ELEVATOR_DOOR, null, null, owner2,
+                t.minus(Duration.ofDays(2)));
+        meToo(elevator, tenant, t.minus(Duration.ofDays(1)));
+        status(elevator, admin, IssueStatus.ACKNOWLEDGED, "Technician booked for tomorrow 9:00",
+                t.minus(Duration.ofDays(1)));
+        status(elevator, manager, IssueStatus.IN_PROGRESS, "Technician on site", t.minus(Duration.ofHours(2)));
+
+        // Untouched for 4 days: the dashboard flags it as stuck.
+        issue(aurora, byName.get("Garage gate"), spaceIndex, remote.getId(), null, null, owner,
+                t.minus(Duration.ofDays(4)));
+
+        Issue intercom = issue(aurora, byName.get("Entrance intercom"), spaceIndex, INTERCOM_NO_SOUND, null, null,
+                owner2, t.minus(Duration.ofDays(10)));
+        status(intercom, manager, IssueStatus.RESOLVED, "Speaker replaced", t.minus(Duration.ofDays(8)));
+
+        // Private to 2B and not shared with management: only 2B's members see it.
+        issue(aurora, byName.get("Kitchen sink"), spaceIndex, PLUMBING_LEAK, null, "Dripping under the sink", tenant,
+                t.minus(Duration.ofHours(6)));
+
+        // Two neighbours wrote the same thing under "Other": ready to be promoted into the catalog.
+        Issue squeak = issue(aurora, byName.get("Roof access door"), spaceIndex, null, "Hinge squeaks", null, owner,
+                t.minus(Duration.ofDays(6)));
+        status(squeak, manager, IssueStatus.RESOLVED, "Oiled", t.minus(Duration.ofDays(5)));
+        issue(aurora, byName.get("Roof access door"), spaceIndex, null, "hinge squeaks!", null, owner2,
+                t.minus(Duration.ofHours(12)));
 
         Membership adminM = memberships.save(new Membership(aurora, admin, Role.ADMIN, null, null));
         memberships.save(new Membership(aurora, manager, Role.MANAGER, null, null));
@@ -205,7 +261,37 @@ public class DevDataSeeder implements ApplicationRunner {
         memberships.save(new Membership(patio, owner, Role.OWNER, flatG, null));
 
         log.info("Seeded demo data: users admin|manager|owner|tenant|owner2|former@demo.test, password '{}'; "
-                + "invite codes TENANT22, SHARE4AB, GUEST777", PASSWORD);
+                + "invite codes TENANT22, SHARE4AB, GUEST777; 7 sample issues", PASSWORD);
+    }
+
+    private static final UUID LIGHT_FLICKERING = UUID.fromString("00000000-0000-0000-0001-000000000002");
+    private static final UUID ELEVATOR_DOOR = UUID.fromString("00000000-0000-0000-0002-000000000003");
+    private static final UUID INTERCOM_NO_SOUND = UUID.fromString("00000000-0000-0000-0005-000000000001");
+    private static final UUID PLUMBING_LEAK = UUID.fromString("00000000-0000-0000-0007-000000000001");
+
+    private Issue issue(Building building, Asset asset, Map<UUID, Space> spaceIndex, UUID problemTypeId,
+            String otherText, String note, User reporter, Instant at) {
+        Space space = spaceIndex.get(asset.getSpaceId());
+        Visibility visibility = SpaceService.effectiveVisibility(space, spaceIndex);
+        Issue issue = issues.save(new Issue(building.getId(), building.nextIssueNumber(), asset.getId(), space.getId(),
+                SpaceService.pathLabel(space, spaceIndex), problemTypeId, otherText, OtherTexts.normalize(otherText),
+                note, visibility, false, reporter.getId(), null, at));
+        issueAffected.save(new IssueAffected(issue.getId(), reporter.getId(), IssueAffected.Kind.REPORTER, at));
+        issueEvents.save(IssueEvent.of(issue, reporter.getId(), IssueEventType.REPORTED, null, at));
+        return issue;
+    }
+
+    private void meToo(Issue issue, User user, Instant at) {
+        issueAffected.save(new IssueAffected(issue.getId(), user.getId(), IssueAffected.Kind.ME_TOO, at));
+        issue.setAffectedCount(issue.getAffectedCount() + 1);
+        issue.touch(at);
+        issueEvents.save(IssueEvent.of(issue, user.getId(), IssueEventType.ME_TOO, null, at));
+    }
+
+    private void status(Issue issue, User actor, IssueStatus to, String comment, Instant at) {
+        IssueStatus from = issue.getStatus();
+        issue.changeStatus(to, at);
+        issueEvents.save(IssueEvent.statusChange(issue, actor.getId(), from, to, comment, at));
     }
 
     private static Space add(List<Space> list, Space space) {

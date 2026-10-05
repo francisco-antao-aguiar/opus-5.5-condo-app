@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -44,6 +45,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (!ex.getFieldErrors().isEmpty()) {
             pd.setProperty("errors", ex.getFieldErrors());
         }
+        ex.getProperties().forEach(pd::setProperty);
         return ResponseEntity.status(ex.getStatus()).body(pd);
     }
 
@@ -107,6 +109,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return ResponseEntity.badRequest().body(problem(HttpStatus.BAD_REQUEST, ErrorCodes.MALFORMED_REQUEST,
                 "The request body is missing or malformed."));
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(problem(HttpStatus.PAYLOAD_TOO_LARGE,
+                ErrorCodes.FILE_TOO_LARGE, "Files can be at most 10 MB."));
     }
 
     /** Framework-generated problems (404 route, 405, 415…) get a code too. */

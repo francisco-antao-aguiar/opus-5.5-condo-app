@@ -1,5 +1,5 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AssetDto, AssetTypeDto, UUID } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { describeError, ErrorText } from '../core/errors';
@@ -11,7 +11,7 @@ import { BulkAssetsDialogComponent } from './bulk-assets-dialog.component';
 
 @Component({
   selector: 'app-assets-page',
-  imports: [AssetDialogComponent, BulkAssetsDialogComponent],
+  imports: [RouterLink, AssetDialogComponent, BulkAssetsDialogComponent],
   templateUrl: './assets.page.html',
 })
 export class AssetsPage {

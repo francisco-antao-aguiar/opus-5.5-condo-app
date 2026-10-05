@@ -73,3 +73,25 @@ shared client after `shared/dist` is rebuilt (the error is "does not provide an 
   explains why it can't be deleted and links to those assets.
 * **Problem catalog** (`/buildings/:id/catalog`, nav entry for `CATALOG_EDIT`) — built-in problems can be hidden or
   shown. Custom ones can be added, renamed, reordered and turned off or on.
+
+## Issues (phase 4)
+
+* **Issues** (`/buildings/:id/issues?view=shared|mine|unit|triage&space=&asset=`) has tabs for *Building*, *Mine*,
+  *My unit* (if you have a unit) and *Triage* (if you hold `ISSUE_TRIAGE`).
+  * You can filter by status (open by default, all, or one status), sort by urgency or recent activity, and page through
+    results.
+  * Triage adds the dashboard: counts per status, issues stuck in *Reported*, hotspots, and how many "Other" texts are
+    waiting for review. It also has a list ↔ board toggle. The board offers quick transitions, each with an optional
+    comment.
+* **Detail** (`issues/:issueId`): header, note, photo gallery and timeline. The available actions come only from the
+  server's `me` capabilities: status changes (sent with `version`), comment, Me too / withdraw, sharing, add photo, and
+  merge into another issue.
+  * Photo links are signed and expire after an hour, so the page refetches the issue when one fails to load.
+* **Report a problem** (`issues/new?space=|asset=`) is a four-step flow: Place → Item → Problem → Details.
+  * When you pick an item, it first shows issues already open on it, with *Me too*.
+  * Each submit sends a fresh `clientRequestId`. A `409 DUPLICATE_ISSUE` shows the existing issue instead of creating
+    a new one.
+  * Photos are uploaded after the issue is created (max 5, 10 MB, JPEG/PNG/WebP/HEIC).
+  * Entry points: the Issues page, asset rows, and the asset dialog.
+* **Review "Other"** (`catalog/other`, needs `CATALOG_EDIT`) promotes recurring free-text problems into the catalog and
+  re-files matching issues.

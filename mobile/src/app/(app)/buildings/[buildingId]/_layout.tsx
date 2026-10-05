@@ -12,6 +12,10 @@ export default function BuildingLayout() {
       <Stack.Screen name="members" options={{ title: 'Members' }} />
       <Stack.Screen name="invite" options={{ title: 'Invite people', presentation: 'modal' }} />
       <Stack.Screen name="assets/[assetId]" options={{ title: '' }} />
+      <Stack.Screen name="report" options={{ title: 'Report a problem', presentation: 'modal' }} />
+      <Stack.Screen name="issues/index" options={{ title: 'Issues' }} />
+      {/* Deep-link target for phase 5 push notifications: buildingapp://buildings/{b}/issues/{id} */}
+      <Stack.Screen name="issues/[issueId]" options={{ title: '' }} />
     </Stack>
   );
 }

@@ -7,6 +7,7 @@ import com.condo.common.persistence.Versions;
 import com.condo.governance.AccessGuard;
 import com.condo.governance.Action;
 import com.condo.governance.SpacePrivacy;
+import com.condo.issue.IssueRepository;
 import com.condo.member.Membership;
 import com.condo.space.dto.SpaceDtos.CreateSpaceRequest;
 import com.condo.space.dto.SpaceDtos.GenerateStructureRequest;
@@ -14,6 +15,7 @@ import com.condo.space.dto.SpaceDtos.GenerateStructureResponse;
 import com.condo.space.dto.SpaceDtos.MoveSpaceRequest;
 import com.condo.space.dto.SpaceDtos.SpaceDto;
 import com.condo.space.dto.SpaceDtos.UpdateSpaceRequest;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -34,14 +36,16 @@ public class SpaceService {
     private final AccessGuard guard;
     private final AssetRepository assets;
     private final SpacePrivacy privacy;
+    private final IssueRepository issues;
 
     public SpaceService(SpaceRepository spaces, StructureGenerator generator, AccessGuard guard,
-            AssetRepository assets, SpacePrivacy privacy) {
+            AssetRepository assets, SpacePrivacy privacy, IssueRepository issues) {
         this.spaces = spaces;
         this.generator = generator;
         this.guard = guard;
         this.assets = assets;
         this.privacy = privacy;
+        this.issues = issues;
     }
 
     // ---------- queries ----------
@@ -131,6 +135,10 @@ public class SpaceService {
             throw ApiException.conflict(ErrorCodes.SPACE_HAS_CHILDREN,
                     "This space has sub-spaces. Delete them too (cascade) or move them first.");
         }
+        if (issues.existsOpenInSubtree(buildingId, node.getPath())) {
+            throw ApiException.conflict(ErrorCodes.SPACE_HAS_OPEN_ISSUES,
+                    "There are open issues in this space. Resolve them first.");
+        }
         // Even with cascade: deleting a space must never silently retire equipment people report problems on.
         if (assets.existsActiveInSubtree(buildingId, node.getPath())) {
             throw ApiException.conflict(ErrorCodes.SPACE_HAS_ASSETS,
@@ -218,6 +226,16 @@ public class SpaceService {
             counts.put((UUID) row[0], (Long) row[1]);
         }
         return counts;
+    }
+
+    /** "Floor 2 › 2B › Kitchen": ancestors below the root, then the space itself (the root alone → its name). */
+    public static String pathLabel(Space space, Map<UUID, Space> byId) {
+        List<String> names = new ArrayList<>();
+        for (Space cur = space; cur != null && !cur.isRoot();
+                cur = cur.getParentId() != null ? byId.get(cur.getParentId()) : null) {
+            names.addFirst(cur.getName());
+        }
+        return names.isEmpty() ? space.getName() : String.join(" › ", names);
     }
 
     public static Visibility effectiveVisibility(Space space, Map<UUID, Space> byId) {

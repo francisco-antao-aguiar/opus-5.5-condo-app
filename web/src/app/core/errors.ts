@@ -30,6 +30,15 @@ const FRIENDLY: Record<string, string> = {
   ASSET_ARCHIVED: 'This asset is archived. Restore it before editing.',
   BUILT_IN_PROBLEM_TYPE: 'Built-in problems can only be hidden or shown, not renamed or re-sorted.',
   DUPLICATE_PROBLEM_TYPE: 'That problem already exists for this asset type.',
+  DUPLICATE_ISSUE: 'This problem was already reported.',
+  INVALID_PROBLEM_TYPE: "That problem isn't offered for this item any more. Pick another one.",
+  INVALID_TRANSITION: "That status change isn't possible from the issue's current status.",
+  INVALID_MERGE: "These issues can't be merged.",
+  ISSUE_MERGED: 'This issue was merged into another one.',
+  SPACE_HAS_OPEN_ISSUES: 'This space still has open issues. Resolve them first.',
+  PHOTO_LIMIT: 'This issue already has the maximum number of photos.',
+  FILE_TOO_LARGE: 'That file is too large (max 10 MB).',
+  UNSUPPORTED_MEDIA_TYPE: 'Use a JPEG, PNG, WebP or HEIC photo.',
 };
 
 /** Shown after a 409 CONFLICT, once the page has refetched the latest data. */

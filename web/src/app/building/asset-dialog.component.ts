@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, OnInit, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AssetDto, AssetTypeDto, UUID } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { ConfirmService } from '../core/confirm.service';
@@ -13,7 +14,7 @@ import { ModalComponent } from '../shared/modal.component';
 /** Create or edit one asset. Archive/restore live here too for existing assets. */
 @Component({
   selector: 'app-asset-dialog',
-  imports: [ReactiveFormsModule, ModalComponent, FieldErrorComponent],
+  imports: [ReactiveFormsModule, RouterLink, ModalComponent, FieldErrorComponent],
   template: `
     <app-modal [title]="asset() ? 'Edit asset' : 'Add asset'" [wide]="true" (closed)="closed.emit()">
       @if (isArchived()) {
@@ -90,8 +91,11 @@ import { ModalComponent } from '../shared/modal.component';
       </form>
 
       <div modal-footer>
+        @if (asset() && !isArchived()) {
+          <a class="btn push-left" [routerLink]="['/buildings', buildingId(), 'issues', 'new']" [queryParams]="{ asset: asset()!.id }" (click)="closed.emit()">🚩 Report a problem</a>
+        }
         @if (asset() && canArchive() && !isArchived()) {
-          <button type="button" class="btn btn-danger push-left" [disabled]="busy()" (click)="archive()">Archive</button>
+          <button type="button" class="btn btn-danger" [disabled]="busy()" (click)="archive()">Archive</button>
         }
         <button type="button" class="btn" (click)="closed.emit()">Cancel</button>
         @if (!isArchived()) {

@@ -1,0 +1,193 @@
+<p class="breadcrumb"><a [routerLink]="['/buildings', ctx.buildingId(), 'issues']">‹ Issues</a></p>
+
+@if (loadError(); as e) {
+  <div class="alert alert-error" role="alert">
+    <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+    <button type="button" class="btn btn-sm" (click)="load()">Retry</button>
+  </div>
+} @else if (loading() && !issue()) {
+  <p class="muted">Loading issue…</p>
+} @else if (issue(); as i) {
+  @if (i.mergedIntoId) {
+    <div class="alert alert-info">
+      This issue was merged into another one and is closed.
+      <a [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.mergedIntoId]">Go to the open issue ›</a>
+    </div>
+  }
+
+  <header class="issue-head">
+    <div class="row gap wrap">
+      <span class="issue-num">#{{ i.number }}</span>
+      <h1>{{ i.title }}</h1>
+      <span [class]="'badge ' + badge[i.status]">{{ statusLabel(i.status) }}</span>
+      @if (i.stuck) {
+        <span class="badge badge-danger">STUCK</span>
+      }
+      @if (i.visibility === 'PRIVATE') {
+        <span class="badge badge-private">{{ i.sharedWithAdmins ? 'Private · shared with management' : 'Private' }}</span>
+      } @else {
+        <span class="badge badge-common">Shared</span>
+      }
+    </div>
+    <p class="muted">
+      <span aria-hidden="true">{{ icon(i.assetType) }}</span>
+      @if (i.assetId) {
+        <a [routerLink]="['/buildings', ctx.buildingId(), 'issues']" [queryParams]="{ asset: i.assetId, view: 'shared' }" title="Other issues on this asset">{{ i.assetName }}</a>
+      } @else {
+        Something else
+      }
+      · {{ i.locationLabel }}
+    </p>
+    <p class="muted small">
+      Reported by {{ i.reportedByName }} · {{ ago(i.createdAt) }}
+      · <strong>{{ i.affectedCount }}</strong> {{ i.affectedCount === 1 ? 'person' : 'people' }} affected
+      @if (i.me.isReporter) {
+        <span class="badge">you reported this</span>
+      } @else if (i.me.isAffected) {
+        <span class="badge badge-info">you're affected</span>
+      }
+    </p>
+  </header>
+
+  <div class="issue-layout">
+    <div class="issue-body">
+      @if (i.note) {
+        <section class="card">
+          <h2>Note</h2>
+          <p class="pre">{{ i.note }}</p>
+        </section>
+      }
+
+      @if (i.photos.length || i.me.canAddPhoto) {
+        <section class="card">
+          <h2>Photos <span class="muted small">{{ i.photos.length }}/{{ maxPhotos }}</span></h2>
+          <div class="gallery">
+            @for (p of i.photos; track p.id) {
+              <div class="thumb-wrap">
+                <button type="button" class="thumb" (click)="openPhoto(p.url)" [title]="'By ' + p.uploadedByName">
+                  <img [src]="p.url" [alt]="'Photo by ' + p.uploadedByName" loading="lazy" (error)="photoFailed()" />
+                </button>
+                @if (p.canDelete) {
+                  <button type="button" class="thumb-delete" aria-label="Delete photo" title="Delete photo" [disabled]="busy()" (click)="deletePhoto(p.id)">✕</button>
+                }
+              </div>
+            }
+            @if (i.me.canAddPhoto && i.photos.length < maxPhotos && !i.mergedIntoId) {
+              <label class="thumb thumb-add" [class.busy]="uploading() > 0">
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple class="sr-only" (change)="addPhotos($any($event.target))" />
+                <span>{{ uploading() ? 'Uploading…' : '＋ Add photo' }}</span>
+              </label>
+            }
+          </div>
+          @for (err of photoErrors(); track $index) {
+            <p class="field-error">{{ err }}</p>
+          }
+        </section>
+      }
+
+      <section class="card">
+        <h2>Timeline</h2>
+        <ol class="timeline">
+          @for (x of events(); track x.e.id) {
+            <li class="tl-item" [class]="'tl-item tl-' + x.e.type">
+              <span class="tl-icon" aria-hidden="true">{{ x.v.icon }}</span>
+              <div class="tl-body">
+                <div>
+                  {{ x.v.text }}
+                  @if (x.v.relatedIssueId) {
+                    <a [routerLink]="['/buildings', ctx.buildingId(), 'issues', x.v.relatedIssueId]">(view)</a>
+                  }
+                  <span class="muted small"> · {{ ago(x.e.createdAt) }}</span>
+                </div>
+                @if (x.v.comment) {
+                  <p class="tl-comment pre">{{ x.v.comment }}</p>
+                }
+              </div>
+            </li>
+          }
+        </ol>
+        @if (i.me.canComment && !i.mergedIntoId) {
+          <form class="comment-form" (submit)="$event.preventDefault(); comment()">
+            <label class="sr-only" for="comment">Add a comment</label>
+            <textarea id="comment" rows="2" maxlength="2000" placeholder="Add a comment…" [value]="commentText()" (input)="commentText.set($any($event.target).value)"></textarea>
+            <button type="submit" class="btn btn-primary btn-sm" [disabled]="busy() || !commentText().trim()">Comment</button>
+          </form>
+        }
+      </section>
+    </div>
+
+    <aside class="issue-actions card">
+      @if (transitions().length) {
+        <h2>Status</h2>
+        <div class="stack">
+          @for (to of transitions(); track to) {
+            <button type="button" class="btn" [class.btn-primary]="$first" [disabled]="busy()" (click)="openTransition(to)">{{ transitionLabel(to) }}</button>
+          }
+        </div>
+      }
+
+      @if (!i.mergedIntoId) {
+        @if (i.me.canMeToo && !i.me.isAffected) {
+          <button type="button" class="btn btn-block" [disabled]="busy()" (click)="meToo()">🙋 Me too</button>
+          <p class="muted small">Say you're affected too: it raises urgency and keeps you posted.</p>
+        } @else if (i.me.isAffected && !i.me.isReporter) {
+          <button type="button" class="btn btn-block" [disabled]="busy()" (click)="withdraw()">Not affected any more</button>
+        }
+
+        @if (i.me.canChangeSharing) {
+          <label class="check">
+            <input type="checkbox" [checked]="i.sharedWithAdmins" [disabled]="busy()" (change)="setSharing($any($event.target).checked)" />
+            <span>Share with building management</span>
+          </label>
+          <p class="muted small">Private issue: only your unit sees it unless you share it.</p>
+        }
+
+        @if (i.me.canMerge) {
+          <button type="button" class="btn btn-block" [disabled]="busy()" (click)="openMerge()">Merge into…</button>
+        }
+      }
+    </aside>
+  </div>
+}
+
+@if (transition(); as t) {
+  <app-transition-dialog [request]="t" [busy]="busy()" (confirmed)="applyTransition($event)" (closed)="transition.set(null)" />
+}
+
+@if (lightbox(); as url) {
+  <div class="modal-backdrop" (click)="lightbox.set(null)"></div>
+  <div class="lightbox" role="dialog" aria-label="Photo" (click)="lightbox.set(null)">
+    <img [src]="url" alt="Photo" (error)="lightbox.set(null); photoFailed()" />
+  </div>
+}
+
+@if (mergeOpen()) {
+  <app-modal [title]="'Merge #' + issue()?.number + ' into…'" [wide]="true" (closed)="mergeOpen.set(false)">
+    <p class="muted small">This issue will be closed and its affected people added to the one you pick. Both timelines record it.</p>
+    <input type="search" class="block" placeholder="Search by #number, problem, asset or place…" [value]="mergeFilter()" (input)="mergeFilter.set($any($event.target).value)" aria-label="Search issues" />
+    <ul class="pick-list">
+      @for (c of filteredCandidates(); track c.id) {
+        <li>
+          <button type="button" [class.selected]="mergeTarget()?.id === c.id" (click)="mergeTarget.set(c)">
+            <strong>#{{ c.number }}</strong> {{ c.title }}
+            <span class="muted small">{{ c.assetName ?? 'Something else' }} · {{ c.locationLabel }} · {{ c.affectedCount }} affected · {{ statusLabel(c.status) }}</span>
+          </button>
+        </li>
+      } @empty {
+        <li class="muted pad">No other open issues match.</li>
+      }
+    </ul>
+    @if (mergeTarget(); as t) {
+      <label class="field">
+        <span>Comment <small class="muted">(optional)</small></span>
+        <input type="text" maxlength="2000" [value]="mergeComment()" (input)="mergeComment.set($any($event.target).value)" placeholder="e.g. Same broken bulb" />
+      </label>
+    }
+    <div modal-footer>
+      <button type="button" class="btn" (click)="mergeOpen.set(false)">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="busy() || !mergeTarget()" (click)="merge()">
+        {{ mergeTarget() ? 'Merge into #' + mergeTarget()!.number : 'Pick an issue' }}
+      </button>
+    </div>
+  </app-modal>
+}

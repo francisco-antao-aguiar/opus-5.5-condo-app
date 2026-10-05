@@ -51,7 +51,12 @@ src/app/                       routes (Expo Router)
   (app)/buildings/[buildingId]/spaces/[spaceId] one level of the drill-down browser
   (app)/buildings/[buildingId]/members          members (end date / revoke / restore) + invitations
   (app)/buildings/[buildingId]/invite           create an invitation, then share its code
-  (app)/buildings/[buildingId]/assets/[assetId] asset detail: problems you can report, edit / move / archive
+  (app)/buildings/[buildingId]/assets/[assetId] asset detail: report, open issues, edit / move / archive
+  (app)/buildings/[buildingId]/report           report flow: place → asset → problem → Send (?assetId= / ?spaceId=)
+  (app)/buildings/[buildingId]/issues/index     issues of a building (mine / building / my unit / manage)
+  (app)/buildings/[buildingId]/issues/[issueId] issue detail + timeline (push-notification deep-link target)
+  (app)/(tabs)/issues          Issues tab (per building) with the offline outbox
+src/reports/                   offline report outbox (AsyncStorage) + runner (retries on reconnect / app start)
   join/index                   "Join with a code" (outside the auth guards: works signed in or out)
   join/[code]                  invitation landing: preview, then accept / sign in / create account
 src/api/                       shared client, token store (secure-store / localStorage on web), query client, query keys
