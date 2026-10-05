@@ -9,6 +9,7 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.Hibernate;
+import org.hibernate.annotations.OptimisticLock;
 
 /**
  * UUIDs are assigned in Java (not by the DB) so an entity has its id before persist — the space tree
@@ -26,6 +27,11 @@ public abstract class BaseEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /**
+     * Excluded from optimistic locking: it only ever changes together with another field, and fields that are
+     * themselves excluded (counters like Issue#affectedCount) must not bump the version through it.
+     */
+    @OptimisticLock(excluded = true)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -41,6 +47,11 @@ public abstract class BaseEntity {
     @PreUpdate
     void onUpdate() {
         updatedAt = Instant.now();
+    }
+
+    /** For entities whose creation time is a business fact taken from the injected clock (or backdated seeds). */
+    protected void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
     }
 
     public UUID getId() {

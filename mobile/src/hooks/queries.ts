@@ -1,7 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   normalizeInviteCode,
   type AssetDto,
+  type ChangeIssueStatusRequest,
+  type IssueDto,
   type CreateAssetRequest,
   type CreateBuildingRequest,
   type CreateInvitationRequest,
@@ -15,6 +17,7 @@ import {
 } from '@condo/shared';
 import { api } from '../api/client';
 import { queryKeys } from '../api/queryKeys';
+import { photoForm, type LocalPhoto } from '../lib/photos';
 
 // ---------- queries ----------
 
@@ -39,6 +42,7 @@ export function useMyPermissions(buildingId: UUID) {
   return useQuery({
     queryKey: queryKeys.permissions(buildingId),
     queryFn: () => api.buildings.myPermissions(buildingId),
+    enabled: !!buildingId,
   });
 }
 
@@ -301,4 +305,88 @@ export function toAssetUpdate(asset: AssetDto, patch: Partial<UpdateAssetRequest
     version: asset.version,
     ...patch,
   };
+}
+
+// ---------- issues ----------
+
+export type IssueListView = 'mine' | 'shared' | 'unit' | 'triage';
+export type IssueStatusFilter = 'open' | 'all';
+const ISSUE_PAGE = 30;
+
+/** Paged list, newest activity first. */
+export function useIssueList(buildingId: UUID, view: IssueListView, status: IssueStatusFilter, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.issueList(buildingId, view, status),
+    queryFn: ({ pageParam }) =>
+      api.issues.list(buildingId, { view, status, sort: 'recent', page: pageParam, size: ISSUE_PAGE }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => ((last.page + 1) * last.size < last.total ? last.page + 1 : undefined),
+    enabled,
+  });
+}
+
+export function useIssue(buildingId: UUID, issueId: UUID) {
+  return useQuery({
+    queryKey: queryKeys.issue(buildingId, issueId),
+    queryFn: () => api.issues.get(buildingId, issueId),
+    // Photo URLs are signed for 1 h; keep them fresh when the screen is revisited.
+    staleTime: 15_000,
+  });
+}
+
+export function useOpenIssuesOnAsset(buildingId: UUID, assetId: UUID | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.openIssuesOnAsset(buildingId, assetId ?? ''),
+    queryFn: () => api.issues.openOnAsset(buildingId, assetId!),
+    enabled: !!assetId,
+    staleTime: 0,
+  });
+}
+
+/**
+ * Every issue action returns the updated IssueDto: put it in the cache, refresh lists.
+ * On CONFLICT / INVALID_TRANSITION / ISSUE_MERGED the detail is refetched so the screen shows the latest.
+ */
+function useIssueMutation<V>(buildingId: UUID, issueId: UUID, fn: (v: V) => Promise<IssueDto>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (issue) => {
+      qc.setQueryData(queryKeys.issue(buildingId, issueId), issue);
+    },
+    onSettled: (_d, error) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.issues(buildingId), refetchType: 'active' });
+      if (error) void qc.invalidateQueries({ queryKey: queryKeys.issue(buildingId, issueId) });
+    },
+  });
+}
+
+export function useChangeIssueStatus(buildingId: UUID, issueId: UUID) {
+  return useIssueMutation(buildingId, issueId, (req: ChangeIssueStatusRequest) =>
+    api.issues.changeStatus(buildingId, issueId, req),
+  );
+}
+
+export function useCommentIssue(buildingId: UUID, issueId: UUID) {
+  return useIssueMutation(buildingId, issueId, (text: string) => api.issues.comment(buildingId, issueId, { text }));
+}
+
+export function useMeToo(buildingId: UUID, issueId: UUID) {
+  return useIssueMutation(buildingId, issueId, (on: boolean) =>
+    on ? api.issues.meToo(buildingId, issueId) : api.issues.withdrawMeToo(buildingId, issueId),
+  );
+}
+
+export function useIssueSharing(buildingId: UUID, issueId: UUID) {
+  return useIssueMutation(buildingId, issueId, (sharedWithAdmins: boolean) =>
+    api.issues.setSharing(buildingId, issueId, { sharedWithAdmins }),
+  );
+}
+
+export function useAddIssuePhoto(buildingId: UUID, issueId: UUID) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (photo: LocalPhoto) => api.issues.uploadPhoto(buildingId, issueId, await photoForm(photo)),
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.issue(buildingId, issueId) }),
+  });
 }

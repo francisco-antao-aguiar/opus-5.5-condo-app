@@ -1,6 +1,8 @@
 import { Pressable, Text, type ColorValue } from 'react-native';
 import { router } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
+import { useAuth } from '../../../auth/AuthProvider';
+import { useReportQueue } from '../../../reports/queue';
 import { useTheme } from '../../../theme';
 
 function TabGlyph({ glyph, color }: { glyph: string; color: ColorValue }) {
@@ -9,6 +11,8 @@ function TabGlyph({ glyph, color }: { glyph: string; color: ColorValue }) {
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { pending, failed } = useReportQueue(useAuth().me?.user.id);
+  const outbox = pending.length + failed.length;
   return (
     <Tabs
       screenOptions={{
@@ -36,6 +40,15 @@ export default function TabsLayout() {
             </Pressable>
           ),
           tabBarIcon: ({ color }) => <TabGlyph glyph={'⌂'} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="issues"
+        options={{
+          title: 'Issues',
+          tabBarIcon: ({ color }) => <TabGlyph glyph={'!'} color={color} />,
+          // Reports still in the outbox (offline) or that couldn't be sent.
+          tabBarBadge: outbox || undefined,
         }}
       />
       <Tabs.Screen

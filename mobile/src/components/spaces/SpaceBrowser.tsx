@@ -25,6 +25,7 @@ import { Button } from '../Button';
 import { Card, FormError, SectionTitle } from '../Layout';
 import { AddAssetSheet } from '../assets/AddAssetSheet';
 import { AssetRow } from '../assets/AssetParts';
+import { PendingReports } from '../issues/PendingReports';
 import { IconButton, ListRow } from '../ListRow';
 import { EmptyView, QueryGate, StateView } from '../StateView';
 import { AddSpaceSheet, EditSpaceSheet } from './SpaceSheets';
@@ -162,6 +163,12 @@ function SpaceBrowserContent({
                   <VisibilityBadge space={current} />
                 </View>
               </View>
+            ) : null}
+            {!isRootScreen ? (
+              <Button
+                title={'Report a problem in ' + current.name}
+                onPress={() => router.push(`/buildings/${building.id}/report?spaceId=${current.id}`)}
+              />
             ) : null}
             <AssetsHere
               assets={assetsHere}
@@ -316,6 +323,13 @@ function BuildingHeader({ building, perms }: { building: BuildingDto; perms: MyP
         <RoleBadge label={roleLabel(perms.role)} />
         <Text style={{ color: colors.textMuted, fontSize: 14 }}>{modeName} governance</Text>
       </View>
+      <Button
+        title="Report a problem"
+        onPress={() => router.push(`/buildings/${building.id}/report`)}
+        style={{ minHeight: 64 }}
+      />
+      <Button title="Issues" variant="secondary" onPress={() => router.push(`/buildings/${building.id}/issues`)} />
+      <PendingReports buildingId={building.id} />
       <Button
         title={canInvite(perms) ? 'Members & invitations' : 'Members'}
         variant="secondary"

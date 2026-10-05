@@ -1,0 +1,203 @@
+<div class="page-head">
+  <h1>Issues</h1>
+  <a class="btn btn-primary" [routerLink]="['/buildings', ctx.buildingId(), 'issues', 'new']" [queryParams]="space() ? { space: space() } : asset() ? { asset: asset() } : {}">＋ Report a problem</a>
+</div>
+
+<nav class="tabs" aria-label="Issue views">
+  @for (t of tabs(); track t) {
+    <button type="button" class="tab" [class.active]="tab() === t" [attr.aria-current]="tab() === t ? 'page' : null" (click)="setTab(t)">{{ tabLabels[t] }}</button>
+  }
+</nav>
+
+@if (tab() === 'triage' && dashboard(); as d) {
+  <section class="dashboard">
+    <div class="stat-row">
+      @for (s of statuses; track s) {
+        <button type="button" class="stat" [class.active]="status() === s" (click)="setStatus(s)">
+          <span class="stat-value">{{ countOf(d, s) }}</span>
+          <span class="stat-label">{{ statusLabel(s) }}</span>
+        </button>
+      }
+      @if (canReviewOther()) {
+        <a class="stat" [routerLink]="['/buildings', ctx.buildingId(), 'catalog', 'other']">
+          <span class="stat-value">{{ d.otherTextGroups }}</span>
+          <span class="stat-label">“Other” to review</span>
+        </a>
+      }
+    </div>
+    <div class="dash-grid">
+      <div class="card dash-card" [class.dash-alert]="d.stuck.length > 0">
+        <h2>{{ stuckLabel(d.stuckThresholdHours) }}</h2>
+        @for (i of d.stuck; track i.id) {
+          <a class="dash-line" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
+            <span><strong>#{{ i.number }}</strong> {{ i.title }}</span>
+            <span class="muted small">{{ i.assetName ?? i.locationLabel }} · {{ age(i.createdAt) }}</span>
+          </a>
+        } @empty {
+          <p class="muted small">Nothing waiting too long. 👍</p>
+        }
+      </div>
+      <div class="card dash-card">
+        <h2>Hotspots</h2>
+        @for (h of d.hotspots; track h.assetId) {
+          <a class="dash-line" [routerLink]="[]" [queryParams]="{ asset: h.assetId }" queryParamsHandling="merge">
+            <span><strong>{{ h.assetName }}</strong> <span class="muted small">{{ h.locationLabel }}</span></span>
+            <span class="muted small">{{ h.openIssues }} open · {{ h.affected }} affected</span>
+          </a>
+        } @empty {
+          <p class="muted small">No asset has several open issues.</p>
+        }
+      </div>
+    </div>
+  </section>
+}
+
+<div class="toolbar">
+  @if (!isBoard()) {
+    <label>
+      <span class="sr-only">Status</span>
+      <select [value]="status()" (change)="setStatus($any($event.target).value)" aria-label="Status filter">
+        <option value="open" [selected]="status() === 'open'">Open</option>
+        <option value="all" [selected]="status() === 'all'">All</option>
+        @for (s of statuses; track s) {
+          <option [value]="s" [selected]="status() === s">{{ statusLabel(s) }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span class="sr-only">Sort</span>
+      <select [value]="sort()" (change)="sort.set($any($event.target).value); page.set(0)" aria-label="Sort">
+        <option value="urgency" [selected]="sort() === 'urgency'">Most urgent</option>
+        <option value="recent" [selected]="sort() === 'recent'">Recent activity</option>
+      </select>
+    </label>
+  }
+  @if (space() || asset()) {
+    <span class="chip">
+      Filtered to {{ asset() ? 'one asset' : filterSpaceName() }}
+      <button type="button" class="btn-icon" aria-label="Clear place filter" (click)="clearPlaceFilter()">✕</button>
+    </span>
+  }
+  <span class="grow"></span>
+  @if (tab() === 'triage') {
+    <div class="segmented" role="group" aria-label="Layout">
+      <button type="button" [class.active]="mode() === 'list'" (click)="mode.set('list')">☰ List</button>
+      <button type="button" [class.active]="mode() === 'board'" (click)="mode.set('board')">▦ Board</button>
+    </div>
+  }
+  <button type="button" class="btn btn-sm" [disabled]="loading()" (click)="reload()">↻</button>
+</div>
+
+@if (loadError(); as e) {
+  <div class="alert alert-error" role="alert">
+    <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+    <button type="button" class="btn btn-sm" (click)="reload()">Retry</button>
+  </div>
+} @else if (isBoard()) {
+  @if (total() > maxPage) {
+    <p class="muted small">Showing the {{ maxPage }} most urgent of {{ total() }} open issues. Use the list for the rest.</p>
+  }
+  <div class="board" [class.busy]="loading()">
+    @for (s of statuses; track s) {
+      <section class="board-col">
+        <h2>{{ statusLabel(s) }} <span class="muted">{{ board()[s].length }}</span></h2>
+        @if (s === 'RESOLVED') {
+          <p class="muted small">Latest 20</p>
+        }
+        @for (i of board()[s]; track i.id) {
+          <a class="board-card" [class.stuck]="i.stuck" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
+            <div class="row gap">
+              <strong>#{{ i.number }}</strong>
+              <span class="grow">{{ i.title }}</span>
+              @if (i.affectedCount > 1) {
+                <span class="badge badge-info" [title]="i.affectedCount + ' people affected'">{{ i.affectedCount }} 🙋</span>
+              }
+            </div>
+            <div class="muted small">{{ icon(i.assetType) }} {{ i.assetName ?? 'Something else' }} · {{ i.locationLabel }}</div>
+            <div class="row gap wrap board-meta">
+              <span class="muted small">{{ age(i.createdAt) }}</span>
+              @if (i.stuck) {
+                <span class="badge badge-danger">stuck</span>
+              }
+              @if (i.visibility === 'PRIVATE') {
+                <span class="badge badge-private">private · shared</span>
+              }
+            </div>
+            <div class="row gap wrap board-actions">
+              @for (to of boardTransitions(i.status); track to) {
+                <button type="button" class="btn btn-sm" (click)="openTransition(i, to, $event)">{{ transitionLabel(i.status, to) }}</button>
+              }
+            </div>
+          </a>
+        } @empty {
+          <p class="muted small">—</p>
+        }
+      </section>
+    }
+  </div>
+} @else if (loading() && !items().length) {
+  <p class="muted">Loading issues…</p>
+} @else {
+  <div class="issue-list" [class.busy]="loading()">
+    @for (i of items(); track i.id) {
+      <a class="issue-row card" [class.stuck]="i.stuck" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
+        <div class="issue-main">
+          <div class="row gap wrap">
+            <span class="issue-num">#{{ i.number }}</span>
+            <strong>{{ i.title }}</strong>
+            <span [class]="'badge ' + badge[i.status]">{{ statusLabel(i.status) }}</span>
+            @if (i.stuck) {
+              <span class="badge badge-danger" title="Waiting in Reported for too long">STUCK</span>
+            }
+          </div>
+          <div class="muted small">
+            <span aria-hidden="true">{{ icon(i.assetType) }}</span> {{ i.assetName ?? 'Something else' }} · {{ i.locationLabel }}
+          </div>
+        </div>
+        <div class="issue-side">
+          @if (i.affectedCount > 1) {
+            <span class="badge badge-info">{{ i.affectedCount }} affected</span>
+          }
+          @if (i.visibility === 'PRIVATE') {
+            <span class="badge badge-private">{{ i.sharedWithAdmins ? 'Private · shared' : 'Private' }}</span>
+          } @else {
+            <span class="badge badge-common">Shared</span>
+          }
+          @if (i.photoCount) {
+            <span class="muted small" [title]="i.photoCount + ' photos'">📷 {{ i.photoCount }}</span>
+          }
+          @if (sort() === 'recent') {
+            <span class="muted small" title="Last activity">{{ i.reportedByName }} · active {{ ago(i.lastActivityAt) }}</span>
+          } @else {
+            <span class="muted small">{{ i.reportedByName }} · {{ age(i.createdAt) }}</span>
+          }
+          @if (i.affectedByMe) {
+            <span class="badge" title="You reported this or said “me too”">you</span>
+          }
+        </div>
+      </a>
+    } @empty {
+      <div class="empty card">
+        <p><strong>No issues here.</strong></p>
+        <p class="muted">
+          @if (status() === 'open') {
+            Nothing open right now.
+          } @else {
+            Try another filter.
+          }
+        </p>
+      </div>
+    }
+  </div>
+  @if (pages() > 1) {
+    <div class="pager">
+      <button type="button" class="btn btn-sm" [disabled]="page() === 0" (click)="page.set(page() - 1)">‹ Previous</button>
+      <span class="muted small">Page {{ page() + 1 }} of {{ pages() }} · {{ total() }} issues</span>
+      <button type="button" class="btn btn-sm" [disabled]="page() >= pages() - 1" (click)="page.set(page() + 1)">Next ›</button>
+    </div>
+  }
+}
+
+@if (transition(); as t) {
+  <app-transition-dialog [request]="t" [busy]="transitioning()" (confirmed)="applyTransition($event)" (closed)="transition.set(null)" />
+}

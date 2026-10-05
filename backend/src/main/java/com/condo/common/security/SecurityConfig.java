@@ -68,6 +68,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // Invitation preview is public so the join page works before sign-up (rate-limited).
                         .requestMatchers(HttpMethod.GET, "/api/invitations/*").permitAll()
+                        // Photo bytes behind HMAC-signed, expiring links (checked in IssuePhotoService).
+                        .requestMatchers(HttpMethod.GET, "/api/files/photos/*").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o

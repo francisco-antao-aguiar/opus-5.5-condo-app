@@ -15,6 +15,11 @@ export const queryKeys = {
   assets: (id: UUID) => ['buildings', id, 'assets'] as const,
   asset: (id: UUID, assetId: UUID) => ['buildings', id, 'assets', assetId] as const,
   catalog: (id: UUID) => ['buildings', id, 'catalog'] as const,
+  /** Prefix of every issue query in a building. */
+  issues: (id: UUID) => ['buildings', id, 'issues'] as const,
+  issueList: (id: UUID, view: string, status: string) => ['buildings', id, 'issues', 'list', view, status] as const,
+  issue: (id: UUID, issueId: UUID) => ['buildings', id, 'issues', 'detail', issueId] as const,
+  openIssuesOnAsset: (id: UUID, assetId: UUID) => ['buildings', id, 'issues', 'onAsset', assetId] as const,
   /** Public preview, keyed by normalized code. */
   invitationPreview: (code: string) => ['invitations', 'preview', code] as const,
 };

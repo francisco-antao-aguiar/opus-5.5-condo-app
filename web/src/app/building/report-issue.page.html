@@ -1,0 +1,177 @@
+<p class="breadcrumb"><a [routerLink]="['/buildings', ctx.buildingId(), 'issues']">‹ Issues</a></p>
+<div class="page-head"><h1>Report a problem</h1></div>
+
+<ol class="stepper" aria-label="Steps">
+  @for (s of steps; track s; let i = $index) {
+    <li [class.done]="i < step()" [class.current]="i === step()">
+      @if (i < step()) {
+        <button type="button" class="step-btn" (click)="goTo($any(i))">{{ i + 1 }}. {{ s }}</button>
+      } @else {
+        <span class="step-btn" [attr.aria-current]="i === step() ? 'step' : null">{{ i + 1 }}. {{ s }}</span>
+      }
+    </li>
+  }
+</ol>
+
+@if (step() > 0) {
+  <p class="report-summary muted">
+    📍 {{ placeLabel() }}
+    @if (step() > 1 && chosenAsset() !== undefined) {
+      › {{ chosenAsset() ? chosenAsset()!.name : 'Something else here' }}
+    }
+    @if (step() > 2 && problemTitle()) {
+      › <strong>{{ problemTitle() }}</strong>
+    }
+  </p>
+}
+
+<section class="card">
+  @switch (step()) {
+    @case (0) {
+      <h2>Where is the problem?</h2>
+      <input type="search" class="block" placeholder="Find a place: lobby, garage, 2B…" [value]="placeFilter()" (input)="placeFilter.set($any($event.target).value)" aria-label="Find a place" />
+      <ul class="pick-list place-list">
+        @for (o of places(); track o.space.id) {
+          <li>
+            <button type="button" [class.selected]="o.space.id === placeId()" [style.padding-left.rem]="placeFilter() ? 0.75 : 0.75 + o.depth * 1.1" (click)="pickPlace(o.space.id)">
+              {{ placeFilter() ? o.label : o.space.name }}
+              @if (o.space.effectiveVisibility === 'PRIVATE') {
+                <span class="badge badge-private">private</span>
+              }
+              @if (o.space.assetCount) {
+                <span class="muted small">{{ o.space.assetCount }} item{{ o.space.assetCount === 1 ? '' : 's' }}</span>
+              }
+            </button>
+          </li>
+        } @empty {
+          <li class="muted pad">No place matches.</li>
+        }
+      </ul>
+    }
+
+    @case (1) {
+      <h2>What isn't working?</h2>
+      @if (assetsLoading()) {
+        <p class="muted">Loading…</p>
+      } @else {
+        <div class="type-grid item-grid">
+          @for (a of assets(); track a.id) {
+            <button type="button" class="type-tile" [class.selected]="chosenAsset()?.id === a.id" (click)="pickAsset(a)">
+              <span class="type-tile-icon" aria-hidden="true">{{ codeIcon(a.type) }}</span>
+              <span>{{ a.name }}</span>
+            </button>
+          }
+          <button type="button" class="type-tile" [class.selected]="chosenAsset() === null" (click)="pickAsset(null)">
+            <span class="type-tile-icon" aria-hidden="true">❓</span>
+            <span>Something else here</span>
+          </button>
+        </div>
+        @if (!assets().length) {
+          <p class="muted small">No equipment is registered in this exact place. Pick a more specific place, or describe it yourself.</p>
+        }
+      }
+    }
+
+    @case (2) {
+      @if (openIssues().length) {
+        <div class="already">
+          <h2>Already reported here</h2>
+          @for (o of openIssues(); track o.id) {
+            <div class="already-row">
+              <span class="grow">
+                <a [routerLink]="['/buildings', ctx.buildingId(), 'issues', o.id]"><strong>#{{ o.number }}</strong> {{ o.title }}</a>
+                · <span [class]="'badge ' + badge[o.status]">{{ statusLabel(o.status) }}</span>
+                · {{ o.affectedCount }} affected
+              </span>
+              @if (o.affectedByMe) {
+                <span class="badge badge-info">You're affected</span>
+              } @else {
+                <button type="button" class="btn btn-sm btn-primary" (click)="meToo(o.id)">🙋 Me too</button>
+              }
+            </div>
+          }
+          <p class="muted small">Same problem? Say “Me too” instead of reporting it again. Something different? Pick it below.</p>
+        </div>
+      }
+
+      <h2>What's wrong{{ chosenAsset() ? ' with the ' + chosenAsset()!.name : '' }}?</h2>
+      @if (chosenAsset()) {
+        <div class="chips problem-chips">
+          @for (p of problems(); track p.id) {
+            <button type="button" class="chip" [class.selected]="!other() && problemTypeId() === p.id" (click)="pickProblem(p.id)">{{ p.label }}</button>
+          }
+          <button type="button" class="chip" [class.selected]="other()" (click)="pickProblem(null)">Other…</button>
+        </div>
+      }
+      @if (other() || !chosenAsset()) {
+        <form class="field other-field" (submit)="$event.preventDefault(); continueOther()">
+          <label for="other-text"><span>Describe the problem</span></label>
+          <input id="other-text" type="text" maxlength="200" [value]="otherText()" (input)="otherText.set($any($event.target).value)" placeholder="e.g. Water dripping from the ceiling" />
+          <div class="actions"><button type="submit" class="btn btn-primary" [disabled]="!otherText().trim()">Continue</button></div>
+        </form>
+      }
+    }
+
+    @case (3) {
+      <h2>Anything else?</h2>
+      <label class="field">
+        <span>Note <small class="muted">(optional)</small></span>
+        <textarea rows="3" maxlength="2000" [value]="note()" (input)="note.set($any($event.target).value)" placeholder="When did it start? Anything that helps whoever fixes it."></textarea>
+      </label>
+
+      <div class="field">
+        <span>Photos <small class="muted">(optional, up to {{ maxPhotos }}, 10 MB each)</small></span>
+        <div class="gallery">
+          @for (f of photos(); track $index) {
+            <div class="thumb thumb-file">
+              <span class="small">📷 {{ f.name }}</span>
+              <button type="button" class="btn-icon" [attr.aria-label]="'Remove ' + f.name" (click)="removePhoto($index)">✕</button>
+            </div>
+          }
+          @if (photos().length < maxPhotos) {
+            <label class="thumb thumb-add">
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple class="sr-only" (change)="addPhotos($any($event.target))" />
+              <span>＋ Add photo</span>
+            </label>
+          }
+        </div>
+        @for (err of photoErrors(); track $index) {
+          <p class="field-error">{{ err }}</p>
+        }
+      </div>
+
+      @if (isPrivate()) {
+        <label class="check">
+          <input type="checkbox" [checked]="share()" (change)="share.set($any($event.target).checked)" />
+          <span>Share with building management</span>
+        </label>
+        <p class="muted small">This is a private place: only your unit will see this issue unless you share it.</p>
+      }
+
+      @if (duplicate(); as d) {
+        <div class="alert alert-warn duplicate-card">
+          <strong>Already reported: #{{ d.number }} {{ d.title }}</strong>
+          <p>{{ statusLabel(d.status) }} · {{ d.affectedCount }} {{ d.affectedCount === 1 ? 'person' : 'people' }} affected</p>
+          <div class="row gap wrap">
+            @if (d.alreadyAffected) {
+              <span>You already reported this or said “me too”.</span>
+            } @else {
+              <button type="button" class="btn btn-sm btn-primary" (click)="meToo(d.issueId)">🙋 Me too</button>
+            }
+            <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'issues', d.issueId]">Open #{{ d.number }}</a>
+          </div>
+        </div>
+      }
+      @if (error(); as e) {
+        <div class="alert alert-error" role="alert"><strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}</div>
+      }
+
+      <div class="actions">
+        <button type="button" class="btn" (click)="goTo(2)">Back</button>
+        <button type="button" class="btn btn-primary" [disabled]="submitting() || !ready()" (click)="submit()">
+          {{ submitting() ? 'Sending…' : 'Report problem' }}
+        </button>
+      </div>
+    }
+  }
+</section>

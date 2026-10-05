@@ -97,7 +97,16 @@ public class CatalogService {
         return toDto(p, Set.of());
     }
 
-    void requireAssetType(String code) {
+    /** Is this problem type currently offered by the building for that asset type? */
+    @Transactional(readOnly = true)
+    public boolean isOffered(UUID buildingId, String assetTypeCode, ProblemType p) {
+        if (!p.belongsTo(buildingId) || !p.getAssetTypeCode().equals(assetTypeCode)) {
+            return false;
+        }
+        return p.isBuiltIn() ? !hidden.hiddenIds(buildingId).contains(p.getId()) : p.isActive();
+    }
+
+    public void requireAssetType(String code) {
         if (!assetTypes.existsById(code)) {
             throw ApiException.badRequest(ErrorCodes.UNKNOWN_ASSET_TYPE, "Unknown asset type " + code);
         }

@@ -39,6 +39,25 @@ export function assetTypeIcon(icon: string | null | undefined): string {
   return (icon && ASSET_ICONS[icon.toLowerCase()]) || FALLBACK_ASSET_ICON;
 }
 
+const CODE_TO_ICON: Record<string, string> = {
+  LIGHT: 'bulb',
+  ELEVATOR: 'elevator',
+  DOOR: 'door',
+  GATE: 'gate',
+  INTERCOM: 'intercom',
+  BOILER: 'boiler',
+  PLUMBING: 'plumbing',
+  WINDOW: 'window',
+  FIRE_SAFETY: 'fire',
+  OTHER: 'tool',
+};
+
+/** Glyph from an asset type *code* (issue summaries carry the code, not the icon key). Null = no asset. */
+export function assetCodeIcon(code: string | null | undefined): string {
+  if (!code) return '📍';
+  return assetTypeIcon(CODE_TO_ICON[code]);
+}
+
 // ---------- spaces ----------
 
 export interface SpaceOption {

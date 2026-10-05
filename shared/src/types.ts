@@ -64,6 +64,15 @@ export type ErrorCode =
   | 'ASSET_ARCHIVED'
   | 'BUILT_IN_PROBLEM_TYPE'
   | 'DUPLICATE_PROBLEM_TYPE'
+  | 'DUPLICATE_ISSUE'
+  | 'INVALID_PROBLEM_TYPE'
+  | 'INVALID_TRANSITION'
+  | 'INVALID_MERGE'
+  | 'ISSUE_MERGED'
+  | 'SPACE_HAS_OPEN_ISSUES'
+  | 'PHOTO_LIMIT'
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_MEDIA_TYPE'
   | 'INTERNAL_ERROR'
   | (string & {});
 
@@ -80,6 +89,8 @@ export interface ApiProblem {
   detail?: string;
   code: ErrorCode;
   errors?: FieldError[];
+  /** Present on 409 DUPLICATE_ISSUE: the open issue to offer "Me too" on instead. */
+  duplicate?: DuplicateIssueInfo;
 }
 
 // ---------- auth ----------
@@ -467,5 +478,220 @@ export interface AssetQuery {
   /** Case-insensitive match on asset name. */
   q?: string;
   includeArchived?: boolean;
+}
+
+// ---------- issues ----------
+
+export type IssueStatus = 'REPORTED' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'RESOLVED';
+
+/** Not RESOLVED (and not merged into another issue). */
+export const OPEN_ISSUE_STATUSES: readonly IssueStatus[] = ['REPORTED', 'ACKNOWLEDGED', 'IN_PROGRESS'];
+
+export type IssueEventType =
+  | 'REPORTED'
+  | 'STATUS_CHANGED'
+  | 'COMMENT'
+  | 'ME_TOO'
+  | 'ME_TOO_WITHDRAWN'
+  | 'MERGED_INTO'
+  | 'MERGED_FROM'
+  | 'PHOTO_ADDED'
+  | 'SHARING_CHANGED'
+  | 'RECLASSIFIED';
+
+/**
+ * shared: COMMON issues (the building's shared list) · mine: reported or "me too"-ed by me ·
+ * unit: PRIVATE issues of my unit · triage: everything I may triage (COMMON + PRIVATE shared with management).
+ */
+export type IssueView = 'shared' | 'mine' | 'unit' | 'triage';
+
+export interface IssueSummaryDto {
+  id: UUID;
+  buildingId: UUID;
+  /** Per-building sequence, shown as "#12". */
+  number: number;
+  /** Problem label, or the "Other" text, e.g. "Flickering". */
+  title: string;
+  status: IssueStatus;
+  visibility: Visibility;
+  sharedWithAdmins: boolean;
+  assetId: UUID | null;
+  assetName: string | null;
+  assetType: AssetTypeCode | null;
+  spaceId: UUID | null;
+  /** Snapshot taken when reported, e.g. "Floor 2 › 2B › Kitchen". */
+  locationLabel: string;
+  problemTypeId: UUID | null;
+  otherText: string | null;
+  /** Reporter + everyone who said "me too". Drives urgency sorting. */
+  affectedCount: number;
+  photoCount: number;
+  reportedByName: string;
+  createdAt: Instant;
+  statusChangedAt: Instant;
+  /** Last timeline entry of any kind (comment, me too, photo…); what sort=recent orders by. */
+  lastActivityAt: Instant;
+  /** The caller reported it or said "me too" (so "already reported" cards can say so). */
+  affectedByMe: boolean;
+  /** REPORTED for longer than the building's threshold (dashboard highlight). */
+  stuck: boolean;
+  mergedIntoId: UUID | null;
+  /** Send back on status changes (also from list/board views) to get 409 CONFLICT instead of overwriting. */
+  version: number;
+}
+
+export interface IssueEventDto {
+  id: UUID;
+  type: IssueEventType;
+  actorName: string;
+  fromStatus: IssueStatus | null;
+  toStatus: IssueStatus | null;
+  comment: string | null;
+  /** MERGED_INTO / MERGED_FROM: the other issue. */
+  relatedIssueId: UUID | null;
+  relatedIssueNumber: number | null;
+  createdAt: Instant;
+}
+
+export interface IssuePhotoDto {
+  id: UUID;
+  /**
+   * Signed, short-lived absolute URL on the API host, usable directly in <img>/<Image> without auth headers;
+   * refetch the issue for a fresh one after urlExpiresAt.
+   */
+  url: string;
+  urlExpiresAt: Instant;
+  contentType: string;
+  sizeBytes: number;
+  uploadedByName: string;
+  createdAt: Instant;
+  /** The caller uploaded it or triages the issue. */
+  canDelete: boolean;
+}
+
+/** What the current user may do with this issue (UI hints; the server re-checks). */
+export interface IssueCapabilities {
+  isReporter: boolean;
+  isAffected: boolean;
+  canMeToo: boolean;
+  canComment: boolean;
+  allowedTransitions: IssueStatus[];
+  canMerge: boolean;
+  canChangeSharing: boolean;
+  canAddPhoto: boolean;
+}
+
+export interface IssueDto extends IssueSummaryDto {
+  note: string | null;
+  timeline: IssueEventDto[];
+  photos: IssuePhotoDto[];
+  me: IssueCapabilities;
+}
+
+/**
+ * Exactly one of problemTypeId / otherText. With no assetId, spaceId is required and so is otherText
+ * ("something else here"). clientRequestId makes retries idempotent: same id → same issue back.
+ */
+export interface ReportIssueRequest {
+  assetId?: UUID | null;
+  spaceId?: UUID | null;
+  problemTypeId?: UUID | null;
+  otherText?: string | null;
+  note?: string | null;
+  /** PRIVATE issues only: let building management see and handle it. */
+  sharedWithAdmins?: boolean;
+  clientRequestId?: UUID;
+}
+
+export interface DuplicateIssueInfo {
+  issueId: UUID;
+  number: number;
+  title: string;
+  status: IssueStatus;
+  affectedCount: number;
+  /** The caller already reported it or said "me too". */
+  alreadyAffected: boolean;
+}
+
+export interface ChangeIssueStatusRequest {
+  status: IssueStatus;
+  comment?: string | null;
+  version?: number;
+}
+
+export interface CommentRequest {
+  text: string;
+}
+
+export interface MergeIssueRequest {
+  /** The issue that survives; this one is closed into it. */
+  intoIssueId: UUID;
+  comment?: string | null;
+}
+
+export interface SharingRequest {
+  sharedWithAdmins: boolean;
+}
+
+export interface IssueQuery {
+  view?: IssueView;
+  /** Comma-separated statuses, or "open" (default) / "all". */
+  status?: string;
+  spaceId?: UUID;
+  assetId?: UUID;
+  /** urgency (default): affectedCount desc, then oldest first. recent: last activity first. */
+  sort?: 'urgency' | 'recent';
+  page?: number;
+  /** 1..100, default 25 (400 VALIDATION_FAILED above 100). */
+  size?: number;
+}
+
+export interface Page<T> {
+  items: T[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+export interface AssetHotspot {
+  assetId: UUID;
+  assetName: string;
+  locationLabel: string;
+  openIssues: number;
+  affected: number;
+}
+
+export interface IssueDashboard {
+  /** Always contains every status (0 when none). */
+  counts: Record<IssueStatus, number>;
+  stuckThresholdHours: number;
+  stuck: IssueSummaryDto[];
+  /** Up to 5 assets with the most open issues (even a single one). */
+  hotspots: AssetHotspot[];
+  /** "Other" groups seen at least twice and not yet promoted (the review page lists single ones too). */
+  otherTextGroups: number;
+}
+
+export interface OtherTextGroup {
+  assetType: AssetTypeCode;
+  normalizedText: string;
+  /** Most common original spelling. */
+  sampleText: string;
+  count: number;
+  openCount: number;
+  lastReportedAt: Instant;
+}
+
+export interface PromoteOtherTextRequest {
+  assetType: AssetTypeCode;
+  normalizedText: string;
+  /** Catalog label to create (defaults to sampleText in UIs). */
+  label: string;
+}
+
+export interface PromoteOtherTextResponse {
+  problemType: ProblemTypeDto;
+  /** Issues re-filed under the new catalog entry. */
+  reclassifiedIssues: number;
 }
 

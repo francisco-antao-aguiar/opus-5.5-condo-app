@@ -26,7 +26,15 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Condo lets you attach a photo of the problem you are reporting.",
+          "cameraPermission": "Condo lets you take a photo of the problem you are reporting.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "buildingapp"
   }

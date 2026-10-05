@@ -47,14 +47,10 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 | **Membership** | id, building, user, role, unitSpace?, status, expiresAt? | One per (building, user). `expiresAt` is the *membership* expiry; checked at every authorization. |
 | **Space** | id, buildingId, parentId, type, name, sortOrder, visibility?, path, depth | Generic tree node. |
 
-### Phases 4–5 (planned — fields reserved, not yet created)
+### Phase 5 (planned — fields reserved, not yet created)
 
 | Entity | Key fields |
 |---|---|
-| **Issue** (P4) | id, buildingId, assetId, spaceId (denormalized), problemTypeId?, otherText?, otherTextNormalized?, note, status, visibility (snapshot of effective visibility), sharedWithAdmins, reporterMembershipId, mergedIntoId?, affectedCount, createdAt, statusChangedAt |
-| **IssueAffected** (P4) | issueId, userId, createdAt — "me too" + subscription |
-| **IssueEvent** (P4) | id, issueId, actorUserId, type (STATUS_CHANGE, COMMENT, ME_TOO, MERGE), fromStatus, toStatus, comment, createdAt |
-| **IssuePhoto** (P4) | id, issueId, storageKey, contentType, size — via `StorageService` |
 | **PushToken** (P5) | id, userId, expoPushToken, platform, lastSeenAt |
 | **Notification** (P5) | id, userId, buildingId, type, payload JSON, readAt, createdAt |
 
@@ -89,6 +85,34 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 * **Bulk add**: one type + name across up to 500 spaces in one call ("Stairwell light" on every floor).
 * **Archived assets without a space** (their space was deleted later) are visible only to members with building-wide `ASSET_DELETE`; restoring one returns 409 since it has nowhere to go.
 * **Phase 5 note:** QR deep links carry only the asset id, so phase 5 adds a building-less `GET /assets/{id}` resolver that answers with the building (or `NOT_A_MEMBER`).
+
+### Phase 4 (implemented)
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| **Issue** | id, buildingId, number (per building), assetId?, spaceId?, locationLabel (snapshot), problemTypeId? \| otherText (+ normalized), note?, status, visibility (snapshot), sharedWithAdmins, reporter, mergedIntoId?, affectedCount, clientRequestId?, createdAt, statusChangedAt, lastActivityAt, version | Exactly one of problemTypeId / otherText. No asset = "something else here" on a space (otherText required). |
+| **IssueAffected** | (issueId, userId), kind REPORTER \| ME_TOO, createdAt | Reporter + "me too" people = affectedCount and the phase 5 notification audience. |
+| **IssueEvent** | id, issueId, actor, type, fromStatus?, toStatus?, comment?, relatedIssueId?, createdAt | The timeline: REPORTED, STATUS_CHANGED, COMMENT, ME_TOO(_WITHDRAWN), MERGED_INTO/FROM, PHOTO_ADDED, SHARING_CHANGED, RECLASSIFIED. |
+| **IssuePhoto** | id, issueId, storageKey, contentType, sizeBytes, uploadedBy, createdAt | Bytes live behind `StorageService` (local disk in dev, S3-ready). |
+| **Building** (+) | issueSeq | Row-locked counter for issue numbers (#1, #2…). |
+
+* **Reporting** = asset + catalog problem (or "Other" text), optional note and photos. The problem must be *offered* by this building for the asset's type (built-in not hidden, or own active custom entry), else 400 `INVALID_PROBLEM_TYPE`. Requires `ISSUE_REPORT` on the space and being able to see the asset (private rule).
+* **Idempotent submit**: `clientRequestId` is unique per reporter. Re-sending the same report (mobile offline queue, flaky network) returns the issue created the first time instead of a second one.
+* **Duplicates**: before creating, an *open* issue on the same asset with the same problem type — or, for "Other", the same normalized text (lower-case, trimmed, collapsed spaces, no trailing punctuation) — answers **409 `DUPLICATE_ISSUE`** with `duplicate: {issueId, number, title, status, affectedCount, alreadyAffected}`. Clients show "Already reported — N neighbours affected" with **Me too**. `GET /assets/{id}/open-issues` lets the asset screen show them *before* the user picks a problem.
+* **Me too** adds the caller to IssueAffected (idempotent), bumps affectedCount and subscribes them (phase 5 notifications). Withdrawable, except by the reporter.
+* **Lifecycle**: REPORTED → ACKNOWLEDGED → IN_PROGRESS → RESOLVED, forward skips allowed, RESOLVED → REPORTED (reopen); anything else is 409 `INVALID_TRANSITION`. Who:
+  * *triagers* — `ISSUE_TRIAGE` on the space and allowed to see the issue — any transition, plus merge;
+  * the *reporter* — RESOLVED ("fixed itself") and reopen of their own issue;
+  * *affected* members — reopen;
+  * for PRIVATE issues not shared with management, the *unit's own members* act as its triagers.
+* **Merge** (triager on both): the source is closed (RESOLVED, `mergedIntoId`) and its affected people are added to the target; both timelines record it. Merged issues are hidden from lists and refuse further changes (409 `ISSUE_MERGED`).
+* **Private issues** (asset/space effectively PRIVATE when reported): visible to the reporter and the unit's members; to triagers only when `sharedWithAdmins`. They never appear in the `shared` view. Reporter/unit members can toggle sharing.
+* **Views**: `shared` (COMMON), `mine` (reported or me-too), `unit` (PRIVATE of my unit), `triage` (what I may triage). Summaries carry `affectedByMe` and `lastActivityAt` per viewer. Sort `urgency` = affectedCount desc, then oldest; `recent` = last activity. Default status filter: open.
+* **Dashboard** (`ISSUE_TRIAGE`): counts per status, issues **stuck in REPORTED** longer than `app.issues.stuck-after` (default 48h), hotspot assets, number of "Other" groups to review.
+* **"Other" review** (`CATALOG_EDIT`): groups by (asset type, normalized text) with count/open count; **promote** creates a custom problem type (phase 3 catalog) and re-files matching issues to it (RECLASSIFIED event; `otherText` kept for history).
+* **Photos**: max 5 per issue, 10 MB each, JPEG/PNG/WebP/HEIC (checked by content sniffing, not just the header). Served via `/api/files/photos/{id}?exp=&sig=` — HMAC-signed, 1-hour links — so `<img>` tags work without an Authorization header. Uploader or triager can delete.
+* **Notifications (phase 5 hook)**: every timeline event publishes an `IssueActivity` application event after commit, carrying the issue and the affected users. Phase 5 listens to it for push + in-app notifications; nothing in phase 4 depends on it.
+* **Spaces**: a space whose subtree has open issues can't be deleted (409 `SPACE_HAS_OPEN_ISSUES`); resolved issues keep their `locationLabel` snapshot with `spaceId = null`.
 
 ### Phase 6 compatibility (design only)
 
@@ -194,6 +218,26 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 | DELETE | `/buildings/{b}/assets/{id}` | `ASSET_DELETE` (archive) |
 | POST | `/buildings/{b}/assets/{id}/restore` | `ASSET_DELETE` |
 
+### Phase 4 endpoints
+
+| Method | Path | Auth / action |
+|---|---|---|
+| POST | `/buildings/{b}/issues` | `ISSUE_REPORT` on the space (409 `DUPLICATE_ISSUE` with `duplicate`) |
+| GET | `/buildings/{b}/issues?view=&status=&spaceId=&assetId=&sort=&page=&size=` | member; filtered by issue visibility |
+| GET | `/buildings/{b}/issues/{id}` | can see the issue |
+| GET | `/buildings/{b}/assets/{assetId}/open-issues` | can see the asset |
+| POST | `/buildings/{b}/issues/{id}/status` | lifecycle rules above |
+| POST | `/buildings/{b}/issues/{id}/comments` | can see the issue |
+| POST / DELETE | `/buildings/{b}/issues/{id}/me-too` | can see the issue (`ISSUE_REPORT`) |
+| POST | `/buildings/{b}/issues/{id}/merge` | triager on both issues |
+| PUT | `/buildings/{b}/issues/{id}/sharing` | reporter or unit member, PRIVATE issues |
+| POST | `/buildings/{b}/issues/{id}/photos` (multipart `file`) | reporter, affected, or triager |
+| DELETE | `/buildings/{b}/issues/{id}/photos/{photoId}` | uploader or triager |
+| GET | `/files/photos/{photoId}?exp=&sig=` | public, signed link |
+| GET | `/buildings/{b}/issues/dashboard` | `ISSUE_TRIAGE` |
+| GET | `/buildings/{b}/issues/other-texts` | `CATALOG_EDIT` |
+| POST | `/buildings/{b}/issues/other-texts/promote` | `CATALOG_EDIT` |
+
 ## 4. Assumptions
 
 1. **One membership per user per building**, with at most one unit. An owner of two units (flat + garage box) would need a `membership_unit` join table — easy to add, but it changes the `OWN_UNIT` check to "any of my units".
@@ -207,4 +251,7 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 9. **Membership end** is either a fixed date chosen when inviting (end of lease) or a duration counted from acceptance (e.g. 7 days for a guest; 7 is the UI preset), never both. No end date is the default. *(Confirmed.)*
 10. **Asset types are global reference data** (like roles); buildings customise the *problem* catalog, not the list of asset types. A building-specific asset type would be a nullable `building_id` on `asset_type`, mirroring `problem_type`.
 11. **Managed-mode owners manage assets in their own unit** (data-only policy change, see Phase 3).
+12. **Reports without an asset** are allowed on a space with free text ("something else here"), so residents are never stuck when equipment isn't registered.
+13. **Duplicate detection is per asset** (same asset + same problem, or same normalized "Other" text). Space-level reports aren't deduplicated automatically; triagers merge them.
+14. **The reporter may close their own issue** ("it fixed itself") and reopen it; neighbours who said "me too" may reopen. Everything else needs `ISSUE_TRIAGE`.
 

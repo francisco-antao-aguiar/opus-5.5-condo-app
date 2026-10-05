@@ -36,7 +36,7 @@ class AttemptLimiterTest {
 
     private final MutableClock clock = new MutableClock();
     private final AttemptLimiter limiter = new AttemptLimiter(
-            new AppProperties(null, null, null, new AppProperties.Invitations(3, Duration.ofMinutes(15))), clock);
+            new AppProperties(null, null, null, new AppProperties.Invitations(3, Duration.ofMinutes(15)), null), clock);
 
     @Test
     void blocksAfterTooManyFailuresWithinTheWindow() {

@@ -43,6 +43,7 @@ import { BuildingContext } from './building-context.service';
             }
           </div>
           <nav aria-label="Building sections">
+            <a routerLink="issues" routerLinkActive="active">🚩 Issues</a>
             <a routerLink="structure" routerLinkActive="active">▤ Structure</a>
             <a routerLink="assets" routerLinkActive="active">💡 Assets</a>
             <a routerLink="members" routerLinkActive="active">👥 Members</a>

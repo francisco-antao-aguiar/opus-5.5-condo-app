@@ -24,6 +24,11 @@ spring:
   web:
     # Fallback when the client sends no Accept-Language (validation messages are localized).
     locale: en
+  servlet:
+    multipart:
+      # Issue photos: 10 MB each (one file per request).
+      max-file-size: 10MB
+      max-request-size: 11MB
   jackson:
     default-property-inclusion: always
     serialization:
@@ -49,6 +54,11 @@ app:
   invitations:
     max-failed-lookups: 10
     lookup-window: 15m
+  storage:
+    local-dir: ${APP_STORAGE_DIR:./uploads}
+  issues:
+    # Issues in REPORTED longer than this are highlighted on the dashboard.
+    stuck-after: 48h
   memberships:
     # Flips ACTIVE memberships past their end date to EXPIRED. Access is already cut at check time.
     expiry-cron: "0 */15 * * * *"

@@ -4,3 +4,5 @@ spring:
 app:
   seed:
     enabled: false
+  storage:
+    local-dir: ${java.io.tmpdir}/condo-test-uploads
