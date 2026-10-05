@@ -12,12 +12,15 @@ import {
   type SpaceNode,
   type UUID,
 } from '@condo/shared';
-import { useBuilding, useGovernanceModes, useMyPermissions, useSpaces } from '../../hooks/queries';
+import { useBuilding, useGovernanceModes, useLeaveBuilding, useMyPermissions, useSpaces } from '../../hooks/queries';
+import { confirm } from '../../lib/confirm';
+import { errorMessage } from '../../lib/errors';
+import { canInvite } from '../../lib/memberPermissions';
 import { roleLabel } from '../../lib/format';
 import { radius, spacing, useTheme } from '../../theme';
 import { RoleBadge, SpaceTypeIcon, VisibilityBadge } from '../Badges';
 import { Button } from '../Button';
-import { Card } from '../Layout';
+import { Card, FormError } from '../Layout';
 import { IconButton, ListRow } from '../ListRow';
 import { EmptyView, QueryGate, StateView } from '../StateView';
 import { AddSpaceSheet, EditSpaceSheet } from './SpaceSheets';
@@ -83,10 +86,12 @@ function SpaceBrowserContent({
   const { colors } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<SpaceNode | null>(null);
+  // Keep the id, not the node: after a refetch (e.g. a 409 CONFLICT) the sheet shows the latest version.
+  const [editingId, setEditingId] = useState<UUID | null>(null);
 
   const nodes = useMemo(() => indexTree(buildSpaceTree(spaces)), [spaces]);
   const current = nodes.get(spaceId);
+  const editing = editingId ? (nodes.get(editingId) ?? null) : null;
   const path = useMemo(() => spacePath(spaces, spaceId), [spaces, spaceId]);
   const canEditHere = canDo(perms, 'STRUCTURE_EDIT', spaceId, spaces);
 
@@ -160,11 +165,11 @@ function SpaceBrowserContent({
               leading={<SpaceTypeIcon type={item.type} />}
               badges={<VisibilityBadge space={item} />}
               onPress={() => router.push(spaceHref(building.id, item.id))}
-              onLongPress={canEditChild ? () => setEditing(item) : undefined}
+              onLongPress={canEditChild ? () => setEditingId(item.id) : undefined}
               accessibilityHint={count ? 'Opens ' + item.name : undefined}
               trailing={
                 canEditChild ? (
-                  <IconButton glyph={'⋯'} label={'Edit ' + item.name} onPress={() => setEditing(item)} />
+                  <IconButton glyph={'⋯'} label={'Edit ' + item.name} onPress={() => setEditingId(item.id)} />
                 ) : undefined
               }
             />
@@ -190,7 +195,7 @@ function SpaceBrowserContent({
       <EditSpaceSheet
         buildingId={building.id}
         node={editing}
-        onClose={() => setEditing(null)}
+        onClose={() => setEditingId(null)}
       />
     </View>
   );
@@ -200,6 +205,17 @@ function BuildingHeader({ building, perms }: { building: BuildingDto; perms: MyP
   const { colors } = useTheme();
   const modes = useGovernanceModes();
   const modeName = modes.data?.find((m) => m.code === perms.governanceMode)?.name ?? perms.governanceMode;
+  const leave = useLeaveBuilding(building.id);
+
+  async function onLeave() {
+    const ok = await confirm(
+      'Leave ' + building.name + '?',
+      "You'll lose access to this building. To come back you'll need a new invitation.",
+      'Leave',
+    );
+    if (!ok) return;
+    leave.mutate(perms.membershipId, { onSuccess: () => router.dismissTo('/') });
+  }
   return (
     <Card>
       <View style={styles.headerTop}>
@@ -215,10 +231,12 @@ function BuildingHeader({ building, perms }: { building: BuildingDto; perms: MyP
         <Text style={{ color: colors.textMuted, fontSize: 14 }}>{modeName} governance</Text>
       </View>
       <Button
-        title="Members"
+        title={canInvite(perms) ? 'Members & invitations' : 'Members'}
         variant="secondary"
         onPress={() => router.push(`/buildings/${building.id}/members`)}
       />
+      <FormError message={leave.error ? errorMessage(leave.error) : null} />
+      <Button title="Leave building" variant="ghost" onPress={onLeave} loading={leave.isPending} />
     </Card>
   );
 }

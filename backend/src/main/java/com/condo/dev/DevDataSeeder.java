@@ -6,6 +6,8 @@ import com.condo.building.Building;
 import com.condo.building.BuildingRepository;
 import com.condo.governance.GovernanceMode;
 import com.condo.governance.Role;
+import com.condo.invitation.Invitation;
+import com.condo.invitation.InvitationRepository;
 import com.condo.member.Membership;
 import com.condo.member.MembershipRepository;
 import com.condo.space.Space;
@@ -14,6 +16,7 @@ import com.condo.space.SpaceType;
 import com.condo.space.Visibility;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -43,15 +46,18 @@ public class DevDataSeeder implements ApplicationRunner {
     private final BuildingRepository buildings;
     private final SpaceRepository spaces;
     private final MembershipRepository memberships;
+    private final InvitationRepository invitations;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
     public DevDataSeeder(UserRepository users, BuildingRepository buildings, SpaceRepository spaces,
-            MembershipRepository memberships, PasswordEncoder passwordEncoder, Clock clock) {
+            MembershipRepository memberships, InvitationRepository invitations, PasswordEncoder passwordEncoder,
+            Clock clock) {
         this.users = users;
         this.buildings = buildings;
         this.spaces = spaces;
         this.memberships = memberships;
+        this.invitations = invitations;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
     }
@@ -68,6 +74,7 @@ public class DevDataSeeder implements ApplicationRunner {
         User owner = users.save(new User("owner@demo.test", hash, "Olívia Owner"));
         User tenant = users.save(new User("tenant@demo.test", hash, "Tiago Tenant"));
         User owner2 = users.save(new User("owner2@demo.test", hash, "Rita Duplex"));
+        User former = users.save(new User("former@demo.test", hash, "Filipe Former"));
 
         // ---------- Managed building with an irregular structure ----------
         Building aurora = buildings.save(new Building("Edifício Aurora", "Rua das Flores 12, Lisboa",
@@ -86,8 +93,12 @@ public class DevDataSeeder implements ApplicationRunner {
         add(s, unit(ground, "0A", 2));
 
         Space f1 = add(s, floor(root, "Floor 1", 1));
+        Space unit1A = null;
         for (String u : List.of("1A", "1B", "1C", "1D")) {
-            add(s, unit(f1, u, u.charAt(1) - 'A'));
+            Space x = add(s, unit(f1, u, u.charAt(1) - 'A'));
+            if (u.equals("1A")) {
+                unit1A = x;
+            }
         }
         Space f2 = add(s, floor(root, "Floor 2", 2));
         Space unit2B = null;
@@ -109,7 +120,7 @@ public class DevDataSeeder implements ApplicationRunner {
         add(s, Space.childOf(duplex, SpaceType.ROOM, "Upper level (floor 4)", 1, null));
 
         Space f4 = add(s, floor(root, "Floor 4", 4));
-        add(s, unit(f4, "4A", 0));
+        Space unit4A = add(s, unit(f4, "4A", 0));
         add(s, unit(f4, "4B", 1));
 
         add(s, common(root, "Stairwell", 10_000));
@@ -117,12 +128,26 @@ public class DevDataSeeder implements ApplicationRunner {
         add(s, common(root, "Roof", 10_002));
         spaces.saveAll(s);
 
-        memberships.save(new Membership(aurora, admin, Role.ADMIN, null, null));
+        Membership adminM = memberships.save(new Membership(aurora, admin, Role.ADMIN, null, null));
         memberships.save(new Membership(aurora, manager, Role.MANAGER, null, null));
-        memberships.save(new Membership(aurora, owner, Role.OWNER, unit2B, null));
+        Membership ownerM = memberships.save(new Membership(aurora, owner, Role.OWNER, unit2B, null));
         memberships.save(new Membership(aurora, tenant, Role.TENANT, unit2B,
                 clock.instant().plus(Duration.ofDays(180))));
         memberships.save(new Membership(aurora, owner2, Role.OWNER, duplex, null));
+        // A tenant whose lease ended: shows up as EXPIRED and has no access.
+        memberships.save(new Membership(aurora, former, Role.TENANT, unit1A,
+                clock.instant().minus(Duration.ofDays(10))));
+
+        // Invitations (codes are fixed so they're easy to try: /join/TENANT22, /join/SHARE4AB, /join/GUEST777).
+        Instant now = clock.instant();
+        invitations.save(new Invitation(aurora, "TENANT22", Role.TENANT, unit2B, ownerM, 3,
+                now.plus(Duration.ofDays(30)), now.plus(Duration.ofDays(365)), "Flatmates for 2B"));
+        invitations.save(new Invitation(aurora, "SHARE4AB", Role.OWNER, unit4A, adminM, 1,
+                now.plus(Duration.ofDays(7)), null, "New owner of 4A"));
+        invitations.save(new Invitation(aurora, "GUEST777", Role.TENANT, unit2B, ownerM, 1,
+                now.plus(Duration.ofDays(14)), null, 7, "A friend staying for a week"));
+        invitations.save(new Invitation(aurora, "EXPRD222", Role.TENANT, unit1A, adminM, 1,
+                now.minus(Duration.ofDays(1)), null, "Old link"));
 
         // ---------- Small self-managed building ----------
         Building patio = buildings.save(new Building("Casa do Pátio", "Travessa do Sol 3, Porto", GovernanceMode.OPEN));
@@ -137,7 +162,8 @@ public class DevDataSeeder implements ApplicationRunner {
         memberships.save(new Membership(patio, owner2, Role.ADMIN, null, null));
         memberships.save(new Membership(patio, owner, Role.OWNER, flatG, null));
 
-        log.info("Seeded demo data: users admin|manager|owner|tenant|owner2@demo.test, password '{}'", PASSWORD);
+        log.info("Seeded demo data: users admin|manager|owner|tenant|owner2|former@demo.test, password '{}'; "
+                + "invite codes TENANT22, SHARE4AB, GUEST777", PASSWORD);
     }
 
     private static Space add(List<Space> list, Space space) {

@@ -16,14 +16,16 @@ public final class MemberDtos {
 
     /** {@code email} is null unless the caller may manage this member. */
     public record MemberDto(UUID id, UUID userId, String displayName, String email, String role, UUID unitId,
-            String unitName, MembershipStatus status, Instant expiresAt, Instant createdAt) {
+            String unitName, MembershipStatus status, Instant expiresAt, Instant createdAt, String invitedByName,
+            long version) {
     }
 
     /** Full replace. */
     public record UpdateMemberRequest(
             @NotBlank @Size(max = 32) String role,
             UUID unitId,
-            @Future Instant expiresAt) {
+            @Future Instant expiresAt,
+            Long version) {
     }
 
     public record MembershipSummary(UUID membershipId, UUID buildingId, String buildingName, String role,

@@ -169,6 +169,32 @@ class SpaceControllerIT extends IntegrationTest {
     }
 
     @Test
+    void staleVersionsAreRejectedInsteadOfOverwriting() throws Exception {
+        JsonNode floor = create(root.getId(), "FLOOR", "Mezzanine");
+        long v0 = floor.get("version").asLong();
+        Map<String, Object> update = new HashMap<>();
+        update.put("name", "Mezzanine (east)");
+        update.put("type", "FLOOR");
+        update.put("visibility", null);
+        update.put("sortOrder", 0);
+        update.put("version", v0);
+        String url = "/api/buildings/{b}/spaces/{s}";
+        JsonNode updated = body(putAs(admin, update, url, buildingId, floor.get("id").asText())
+                .andExpect(status().isOk()));
+        assertThat(updated.get("version").asLong()).isEqualTo(v0 + 1);
+
+        // A second editor still holding v0 gets a conflict, not a silent overwrite.
+        update.put("name", "Mezzanine (west)");
+        putAs(admin, update, url, buildingId, floor.get("id").asText())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
+
+        // Clients that don't send a version keep last-write-wins.
+        update.remove("version");
+        putAs(admin, update, url, buildingId, floor.get("id").asText()).andExpect(status().isOk());
+    }
+
+    @Test
     void spacesOfAnotherBuildingAreNotReachable() throws Exception {
         Actor bob = register("Bob");
         UUID other = UUID.fromString(createBuilding(bob, "MANAGED").get("id").asText());

@@ -1,12 +1,16 @@
 import type {
+  AcceptInvitationResponse,
   ApiProblem,
   AuthTokens,
   BuildingDto,
   CreateBuildingRequest,
+  CreateInvitationRequest,
   CreateSpaceRequest,
   GenerateStructureRequest,
   GenerateStructureResponse,
   GovernanceModeDto,
+  InvitationDto,
+  InvitationPreview,
   LoginRequest,
   MeResponse,
   MemberDto,
@@ -20,6 +24,17 @@ import type {
   UpdateMemberRequest,
   UpdateSpaceRequest,
 } from './types.js';
+
+/** "abcd-efgh " → "ABCDEFGH". Users may type codes in any case, with spaces or a dash. */
+export function normalizeInviteCode(input: string): string {
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** "ABCDEFGH" → "ABCD-EFGH" for display. */
+export function formatInviteCode(code: string): string {
+  const c = normalizeInviteCode(code);
+  return c.length === 8 ? `${c.slice(0, 4)}-${c.slice(4)}` : c;
+}
 
 /** Where the client keeps tokens. Web: localStorage; mobile: expo-secure-store. */
 export interface TokenStore {
@@ -136,6 +151,11 @@ export function createApiClient(config: ApiClientConfig) {
     return parse<T>(await raw('POST', path, body, null));
   }
 
+  /** Never sends a token, so a stale session can't turn a public page into a login redirect. */
+  async function publicGet<T>(path: string): Promise<T> {
+    return parse<T>(await raw('GET', path, undefined, null));
+  }
+
   const b = (buildingId: UUID) => `/buildings/${encodeURIComponent(buildingId)}`;
 
   return {
@@ -196,6 +216,22 @@ export function createApiClient(config: ApiClientConfig) {
         request<MemberDto>('PUT', `${b(buildingId)}/members/${memberId}`, req),
       revoke: (buildingId: UUID, memberId: UUID) =>
         request<void>('DELETE', `${b(buildingId)}/members/${memberId}`),
+    },
+
+    invitations: {
+      list: (buildingId: UUID) => request<InvitationDto[]>('GET', `${b(buildingId)}/invitations`),
+      create: (buildingId: UUID, req: CreateInvitationRequest) =>
+        request<InvitationDto>('POST', `${b(buildingId)}/invitations`, req),
+      revoke: (buildingId: UUID, invitationId: UUID) =>
+        request<void>('DELETE', `${b(buildingId)}/invitations/${invitationId}`),
+      /** Public; works signed out. Accepts the code with or without dash, any case. */
+      preview: (code: string) =>
+        publicGet<InvitationPreview>(`/invitations/${encodeURIComponent(normalizeInviteCode(code))}`),
+      accept: (code: string) =>
+        request<AcceptInvitationResponse>(
+          'POST',
+          `/invitations/${encodeURIComponent(normalizeInviteCode(code))}/accept`,
+        ),
     },
   };
 }

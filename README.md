@@ -36,7 +36,8 @@ mvn spring-boot:run
 
 - API: http://localhost:8080/api · Swagger UI: http://localhost:8080/swagger-ui.html
 - The `dev` profile is the default. It enables the H2 console at http://localhost:8080/h2-console (JDBC URL `jdbc:h2:file:./data/condo`, user `sa`, no password) and seeds demo data on first start.
-- Data lives in `backend/data/` (survives restarts). Delete that folder to reseed.
+- Data lives in `backend/data/` (survives restarts). Delete that folder to reseed (needed to get new seed data after pulling).
+- Invitation links point at `APP_WEB_BASE_URL` (default `http://localhost:4200`). A scheduled job (every 15 min, `app.memberships.expiry-cron`) marks lapsed memberships EXPIRED; access is already cut at the exact end time regardless.
 - Other port: `mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=18080`
 - Tests (unit + integration on in-memory H2): `mvn test`
 - Outside dev, set `APP_JWT_SECRET` to a base64 key of at least 32 bytes.
@@ -50,6 +51,16 @@ mvn spring-boot:run
 | owner@demo.test | OWNER of unit 2B in *Aurora*; OWNER in *Casa do Pátio* (Open) |
 | tenant@demo.test | TENANT of 2B, membership expires in 180 days |
 | owner2@demo.test | OWNER of the 3C/4C duplex in *Aurora*; ADMIN of *Casa do Pátio* |
+| former@demo.test | ex-TENANT of 1A whose membership expired 10 days ago (gets "access expired") |
+
+Invite codes in the seed (open `http://localhost:4200/join/<code>` or `buildingapp://join/<code>`):
+
+| Code | What it does |
+|---|---|
+| `TENANT22` | Olívia (owner of 2B) invites up to 3 flatmates as TENANT of 2B, access for 1 year |
+| `SHARE4AB` | Admin invites one new OWNER of 4A |
+| `GUEST777` | Olívia invites a guest into 2B whose access lasts 7 days from when they accept |
+| `EXPRD222` | Already expired, to see the error state |
 
 *Edifício Aurora* is deliberately irregular: a basement with garage, storage and boiler room; a ground floor with a lobby, a shop and one flat; floors with 4, 3, 3 and 2 units; a duplex spanning two floors; and roof, stairwell and elevator shaft hanging off the root.
 
@@ -77,7 +88,7 @@ The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To 
 ## Roadmap
 
 1. **Building tree, spaces, roles, governance, auth** ✅
-2. Invitations and membership expiry
+2. **Invitations and membership expiry** ✅
 3. Asset types, assets, problem catalogs
 4. Issue reporting, duplicate detection / "me too", lifecycle and timeline
 5. QR codes, deep links, push notifications

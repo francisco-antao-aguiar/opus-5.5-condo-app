@@ -16,6 +16,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/register.page').then((m) => m.RegisterPage),
   },
   {
+    // Public: works signed out (preview), accept needs a session.
+    path: 'join/:code',
+    title: 'Join a building · Condo',
+    loadComponent: () => import('./pages/join.page').then((m) => m.JoinPage),
+  },
+  {
     path: 'buildings',
     canActivate: [authGuard],
     title: 'Buildings · Condo',

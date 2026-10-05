@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { ApiError } from '@condo/shared';
+import { safeReturnUrl } from '../shared/invitations';
 import { AuthService } from './auth.service';
 
 /** Protected routes: requires a stored session and loads /me once. */
@@ -21,8 +22,9 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   }
 };
 
-/** Login/register: skip them when already signed in. */
-export const guestGuard: CanActivateFn = () => {
+/** Login/register: skip them when already signed in (honouring ?returnUrl, e.g. back to /join/CODE). */
+export const guestGuard: CanActivateFn = (route) => {
   const auth = inject(AuthService);
-  return auth.hasSession() ? inject(Router).createUrlTree(['/buildings']) : true;
+  if (!auth.hasSession()) return true;
+  return inject(Router).parseUrl(safeReturnUrl(route.queryParamMap.get('returnUrl')));
 };

@@ -53,7 +53,7 @@ public abstract class IntegrationTest {
     }
 
     protected Actor register(String name) throws Exception {
-        String email = name.toLowerCase() + "-" + UUID.randomUUID() + "@test.local";
+        String email = name.toLowerCase().replaceAll("[^a-z0-9]", "") + "-" + UUID.randomUUID() + "@test.local";
         JsonNode tokens = body(call(post("/api/auth/register"), null,
                 Map.of("email", email, "password", "password123", "displayName", name)));
         UUID id = users.findByEmail(email).map(User::getId).orElseThrow();

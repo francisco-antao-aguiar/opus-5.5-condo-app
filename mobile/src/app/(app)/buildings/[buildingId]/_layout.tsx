@@ -10,6 +10,7 @@ export default function BuildingLayout() {
       <Stack.Screen name="index" options={{ title: '' }} />
       <Stack.Screen name="spaces/[spaceId]" options={{ title: '' }} />
       <Stack.Screen name="members" options={{ title: 'Members' }} />
+      <Stack.Screen name="invite" options={{ title: 'Invite people', presentation: 'modal' }} />
     </Stack>
   );
 }

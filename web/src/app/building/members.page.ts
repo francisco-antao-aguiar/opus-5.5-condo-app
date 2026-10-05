@@ -1,19 +1,22 @@
-import { DatePipe, TitleCasePipe } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MemberDto, RoleDto, UUID } from '@condo/shared';
+import { InvitationDto, MemberDto, RoleDto, UUID, formatInviteCode } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
 import { ConfirmService } from '../core/confirm.service';
-import { applyServerErrors, describeError, ErrorText } from '../core/errors';
+import { applyServerErrors, CONFLICT_RELOADED, describeError, ErrorText, isConflict } from '../core/errors';
 import { ToastService } from '../core/toast.service';
+import { copyText } from '../shared/clipboard';
 import { dateInputToInstant, instantToDateInput } from '../shared/dates';
+import { grantableRoles, invitationStatusBadge, inviteTargets, localDateString, memberStatusBadge } from '../shared/invitations';
 import { FieldErrorComponent } from '../shared/field-error.component';
 import { BuildingContext } from './building-context.service';
+import { InviteDialogComponent } from './invite-dialog.component';
 
 @Component({
   selector: 'app-members-page',
-  imports: [ReactiveFormsModule, DatePipe, TitleCasePipe, FieldErrorComponent],
+  imports: [ReactiveFormsModule, DatePipe, FieldErrorComponent, InviteDialogComponent],
   templateUrl: './members.page.html',
 })
 export class MembersPage {
@@ -38,14 +41,26 @@ export class MembersPage {
   });
 
   protected readonly myUserId = computed(() => this.auth.user()?.id ?? null);
-  protected readonly canInvite = computed(() => this.ctx.can('MEMBER_INVITE'));
+  protected readonly inviteTargets = computed(() => inviteTargets(this.ctx.perms(), this.ctx.spaces(), this.ctx.labels()));
+  protected readonly canInvite = computed(() => this.inviteTargets().canInvite);
 
   /** Roles I may grant (rank ≤ mine). A hint: the server enforces ROLE_RANK_EXCEEDED. */
-  protected readonly grantableRoles = computed(() => {
-    const roles = [...this.roles()].sort((a, b) => b.rank - a.rank);
-    const mine = roles.find((r) => r.code === this.ctx.perms()?.role);
-    return mine ? roles.filter((r) => r.rank <= mine.rank) : roles;
+  protected readonly grantableRoles = computed(() => grantableRoles(this.roles(), this.ctx.perms()?.role));
+
+  // ---------- invitations ----------
+  protected readonly inviteOpen = signal(false);
+  protected readonly invitations = signal<InvitationDto[]>([]);
+  protected readonly invitationsLoading = signal(false);
+  protected readonly invitationsError = signal<ErrorText | null>(null);
+  protected readonly showAllInvitations = signal(false);
+  protected readonly visibleInvitations = computed(() => {
+    const list = [...this.invitations()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return this.showAllInvitations() ? list : list.filter((i) => i.status === 'ACTIVE');
   });
+  protected readonly hiddenInvitationCount = computed(() => this.invitations().length - this.visibleInvitations().length);
+  protected readonly formatCode = formatInviteCode;
+  protected readonly invitationBadge = invitationStatusBadge;
+  protected readonly memberBadge = memberStatusBadge;
   protected readonly roleNames = computed(() => new Map(this.roles().map((r) => [r.code, r.name])));
 
   protected readonly sorted = computed(() => {
@@ -58,10 +73,22 @@ export class MembersPage {
     );
   });
 
+  /** Editing an expired member: explain how to restore access. */
+  protected readonly editingExpired = computed(() => {
+    const m = this.members().find((x) => x.id === this.editingId());
+    return !!m && this.memberBadge(m).label === 'Expired';
+  });
+  protected readonly today = localDateString(new Date());
+
   constructor() {
     effect(() => {
       const id = this.ctx.buildingId();
       if (id) untracked(() => void this.load(id));
+    });
+    effect(() => {
+      const id = this.ctx.buildingId();
+      const can = this.canInvite();
+      if (id && can) untracked(() => void this.loadInvitations(id));
     });
   }
 
@@ -69,12 +96,13 @@ export class MembersPage {
     return this.grantableRoles().some((r) => r.code === role);
   }
 
+  /** Active and expired members can be edited (a new future end date restores an expired one); revoked can't. */
   protected canManage(m: MemberDto): boolean {
-    return m.status === 'ACTIVE' && this.ctx.can('MEMBER_MANAGE', m.unitId);
+    return m.status !== 'REVOKED' && this.ctx.can('MEMBER_MANAGE', m.unitId);
   }
 
-  protected isExpired(m: MemberDto): boolean {
-    return !!m.expiresAt && new Date(m.expiresAt).getTime() < Date.now();
+  protected isInactive(m: MemberDto): boolean {
+    return this.memberBadge(m).label !== 'Active';
   }
 
   protected async load(buildingId: UUID): Promise<void> {
@@ -116,17 +144,31 @@ export class MembersPage {
         role: v.role,
         unitId: v.unitId || null,
         expiresAt: dateInputToInstant(v.expiresAt),
+        version: m.version,
       });
       this.members.update((list) => list.map((x) => (x.id === updated.id ? updated : x)));
       this.editingId.set(null);
       this.toast.success(`Updated ${updated.displayName}`);
       if (m.userId === this.myUserId()) await this.selfChanged();
     } catch (e) {
+      if (isConflict(e)) {
+        await this.reloadAfterConflict(m.id);
+        return;
+      }
       applyServerErrors(this.form, e);
       this.editError.set(describeError(e));
     } finally {
       this.saving.set(false);
     }
+  }
+
+  /** 409 CONFLICT: refetch and reopen the editor on the latest version of the member. */
+  private async reloadAfterConflict(memberId: UUID): Promise<void> {
+    await this.load(this.ctx.buildingId()!);
+    const fresh = this.members().find((x) => x.id === memberId);
+    if (fresh && this.canManage(fresh)) this.startEdit(fresh);
+    else this.editingId.set(null);
+    this.toast.info(CONFLICT_RELOADED, 'Check the values and save again if needed.');
   }
 
   protected async revoke(m: MemberDto): Promise<void> {
@@ -152,6 +194,46 @@ export class MembersPage {
     } catch (e) {
       this.toast.error(e);
     }
+  }
+
+  // ---------- invitations ----------
+
+  protected async loadInvitations(buildingId: UUID = this.ctx.buildingId()!): Promise<void> {
+    this.invitationsLoading.set(true);
+    this.invitationsError.set(null);
+    try {
+      this.invitations.set(await this.api.client.invitations.list(buildingId));
+    } catch (e) {
+      this.invitationsError.set(describeError(e));
+    } finally {
+      this.invitationsLoading.set(false);
+    }
+  }
+
+  protected onInvited(inv: InvitationDto): void {
+    this.invitations.update((list) => [inv, ...list.filter((i) => i.id !== inv.id)]);
+  }
+
+  protected async copyLink(inv: InvitationDto): Promise<void> {
+    if (await copyText(inv.joinUrl)) this.toast.success('Link copied', this.formatCode(inv.code));
+    else this.toast.info("Couldn't copy automatically", inv.joinUrl);
+  }
+
+  protected async revokeInvitation(inv: InvitationDto): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: `Revoke invitation ${this.formatCode(inv.code)}?`,
+      message: 'The code and link stop working immediately. People who already joined keep their access.',
+      confirmText: 'Revoke',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await this.api.client.invitations.revoke(this.ctx.buildingId()!, inv.id);
+      this.toast.success('Invitation revoked');
+    } catch (e) {
+      this.toast.error(e);
+    }
+    await this.loadInvitations();
   }
 
   /** My own membership changed: permissions (and maybe access) changed with it. */

@@ -1,9 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { applyServerErrors, describeError, errorCode, ErrorText } from '../core/errors';
 import { FieldErrorComponent } from '../shared/field-error.component';
+import { safeReturnUrl } from '../shared/invitations';
 
 @Component({
   selector: 'app-register-page',
@@ -11,6 +12,9 @@ import { FieldErrorComponent } from '../shared/field-error.component';
   template: `
     <section class="auth-card card">
       <h1>Create account</h1>
+      @if (joining()) {
+        <p class="alert alert-info">Create your account, then accept the invitation.</p>
+      }
       @if (error(); as e) {
         <div class="alert alert-error" role="alert"><strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}</div>
       }
@@ -32,13 +36,18 @@ import { FieldErrorComponent } from '../shared/field-error.component';
         </label>
         <button type="submit" class="btn btn-primary btn-block" [disabled]="busy()">{{ busy() ? 'Creating…' : 'Create account' }}</button>
       </form>
-      <p class="muted center">Already registered? <a routerLink="/login">Sign in</a></p>
+      <p class="muted center">Already registered? <a routerLink="/login" [queryParams]="linkParams()">Sign in</a></p>
     </section>
   `,
 })
 export class RegisterPage {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+
+  /** Query param (component input binding): where to go after registering, e.g. /join/CODE. */
+  readonly returnUrl = input<string>();
+  protected readonly joining = computed(() => safeReturnUrl(this.returnUrl(), '').startsWith('/join/'));
+  protected readonly linkParams = computed(() => (this.returnUrl() ? { returnUrl: safeReturnUrl(this.returnUrl()) } : {}));
 
   protected readonly busy = signal(false);
   protected readonly error = signal<ErrorText | null>(null);
@@ -57,7 +66,7 @@ export class RegisterPage {
     try {
       const v = this.form.getRawValue();
       await this.auth.register({ ...v, displayName: v.displayName.trim() });
-      await this.router.navigate(['/buildings']);
+      await this.router.navigateByUrl(safeReturnUrl(this.returnUrl()));
     } catch (e) {
       applyServerErrors(this.form, e);
       if (errorCode(e) === 'EMAIL_TAKEN') {

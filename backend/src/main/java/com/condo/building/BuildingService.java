@@ -7,6 +7,7 @@ import com.condo.building.dto.BuildingDtos.CreateBuildingRequest;
 import com.condo.building.dto.BuildingDtos.UpdateBuildingRequest;
 import com.condo.common.error.ApiException;
 import com.condo.common.error.ErrorCodes;
+import com.condo.common.persistence.Versions;
 import com.condo.common.security.CurrentUser;
 import com.condo.governance.AccessGuard;
 import com.condo.governance.Action;
@@ -87,9 +88,11 @@ public class BuildingService {
     public BuildingDto update(UUID buildingId, UpdateBuildingRequest req) {
         Membership m = guard.require(buildingId, Action.BUILDING_SETTINGS);
         Building building = m.getBuilding();
+        Versions.requireCurrent(req.version(), building);
         building.update(req.name().trim(), blankToNull(req.address()), requireMode(req.governanceMode()));
         Space root = spaceService.rootOf(buildingId);
         root.setName(building.getName());
+        buildings.flush();
         return toDto(building, root.getId());
     }
 
@@ -102,7 +105,7 @@ public class BuildingService {
 
     private static BuildingDto toDto(Building b, UUID rootSpaceId) {
         return new BuildingDto(b.getId(), b.getName(), b.getAddress(), b.getGovernanceMode(), rootSpaceId,
-                b.getCreatedAt());
+                b.getCreatedAt(), b.getVersion() != null ? b.getVersion() : 0L);
     }
 
     private static String blankToNull(String s) {

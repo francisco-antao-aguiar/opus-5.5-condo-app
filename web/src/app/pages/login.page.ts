@@ -1,9 +1,10 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { applyServerErrors, describeError, ErrorText } from '../core/errors';
 import { FieldErrorComponent } from '../shared/field-error.component';
+import { safeReturnUrl } from '../shared/invitations';
 
 @Component({
   selector: 'app-login-page',
@@ -11,6 +12,9 @@ import { FieldErrorComponent } from '../shared/field-error.component';
   template: `
     <section class="auth-card card">
       <h1>Sign in</h1>
+      @if (joining()) {
+        <p class="alert alert-info">Sign in to accept your invitation.</p>
+      }
       @if (expired()) {
         <p class="alert alert-info">Your session expired. Please sign in again.</p>
       }
@@ -30,7 +34,7 @@ import { FieldErrorComponent } from '../shared/field-error.component';
         </label>
         <button type="submit" class="btn btn-primary btn-block" [disabled]="busy()">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
       </form>
-      <p class="muted center">No account? <a routerLink="/register">Create one</a></p>
+      <p class="muted center">No account? <a routerLink="/register" [queryParams]="linkParams()">Create one</a></p>
     </section>
   `,
 })
@@ -41,6 +45,10 @@ export class LoginPage {
   /** Query params (component input binding). */
   readonly returnUrl = input<string>();
   readonly expired = input<string>();
+
+  protected readonly joining = computed(() => safeReturnUrl(this.returnUrl(), '').startsWith('/join/'));
+  /** Keep the return target when switching to register. */
+  protected readonly linkParams = computed(() => (this.returnUrl() ? { returnUrl: safeReturnUrl(this.returnUrl()) } : {}));
 
   protected readonly busy = signal(false);
   protected readonly error = signal<ErrorText | null>(null);
@@ -57,8 +65,7 @@ export class LoginPage {
     this.error.set(null);
     try {
       await this.auth.login(this.form.getRawValue());
-      const target = this.returnUrl();
-      await this.router.navigateByUrl(target && target.startsWith('/') && !target.startsWith('//') ? target : '/buildings');
+      await this.router.navigateByUrl(safeReturnUrl(this.returnUrl()));
     } catch (e) {
       applyServerErrors(this.form, e);
       this.error.set(describeError(e));

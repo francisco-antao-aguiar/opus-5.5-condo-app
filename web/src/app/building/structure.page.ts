@@ -12,7 +12,7 @@ import {
 } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { ConfirmService } from '../core/confirm.service';
-import { errorCode } from '../core/errors';
+import { CONFLICT_RELOADED, errorCode, isConflict } from '../core/errors';
 import { ToastService } from '../core/toast.service';
 import { ModalComponent } from '../shared/modal.component';
 import { flattenTree, moveTargets, reorderPlan, subtreeIds } from '../shared/space-utils';
@@ -175,8 +175,9 @@ export class StructurePage {
 
   // ---------- mutations ----------
 
+  /** Full-replace body; carries `version` so a stale edit gets 409 CONFLICT instead of overwriting. */
   private updateRequest(node: SpaceDto, patch: Partial<UpdateSpaceRequest>): UpdateSpaceRequest {
-    return { name: node.name, type: node.type, visibility: node.visibility, sortOrder: node.sortOrder, ...patch };
+    return { name: node.name, type: node.type, visibility: node.visibility, sortOrder: node.sortOrder, version: node.version, ...patch };
   }
 
   /** Runs a mutation, reports errors, then refreshes the flat space list. */
@@ -188,7 +189,9 @@ export class StructurePage {
       if (success) this.toast.success(success);
       return true;
     } catch (e) {
-      this.toast.error(e);
+      // The finally block refetches, so a conflict leaves the user looking at the latest data.
+      if (isConflict(e)) this.toast.info(CONFLICT_RELOADED);
+      else this.toast.error(e);
       return false;
     } finally {
       await this.ctx.refreshSpaces();
@@ -232,10 +235,14 @@ export class StructurePage {
     const plan = reorderPlan(parent.children, node.id, dir);
     if (!plan.length) return;
     const byId = this.ctx.spaceById();
+    // Each PUT bumps that space's version: keep the returned one in case a later step touches it again.
+    const latest = new Map<UUID, SpaceDto>();
     await this.mutate(async () => {
       for (const u of plan) {
-        const s = byId.get(u.id);
-        if (s) await this.api.client.spaces.update(this.bid, s.id, this.updateRequest(s, { sortOrder: u.sortOrder }));
+        const s = latest.get(u.id) ?? byId.get(u.id);
+        if (!s) continue;
+        const updated = await this.api.client.spaces.update(this.bid, s.id, this.updateRequest(s, { sortOrder: u.sortOrder }));
+        latest.set(updated.id, updated);
       }
     });
   }

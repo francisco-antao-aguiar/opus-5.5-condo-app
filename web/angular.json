@@ -54,6 +54,11 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "prebundle": {
+              "exclude": ["@condo/shared"]
+            }
+          },
           "configurations": {
             "production": {
               "buildTarget": "web:build:production"
