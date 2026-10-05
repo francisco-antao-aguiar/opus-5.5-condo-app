@@ -390,3 +390,51 @@ export function useAddIssuePhoto(buildingId: UUID, issueId: UUID) {
     onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.issue(buildingId, issueId) }),
   });
 }
+
+// ---------- QR & notifications ----------
+
+/** Building-less lookup after a scan / deep link. Errors are definitive (403/404/410), never retried. */
+export function useResolvedAsset(assetId: UUID, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.resolvedAsset(assetId),
+    queryFn: () => api.qr.resolve(assetId),
+    enabled,
+    staleTime: 0,
+  });
+}
+
+/** Polled every 60 s while the app is open, and refetched on foreground (focusManager). */
+export function useUnreadCount(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.unreadCount,
+    queryFn: api.notifications.unreadCount,
+    enabled,
+    refetchInterval: 60_000,
+    staleTime: 15_000,
+  });
+}
+
+export function useNotificationList() {
+  return useInfiniteQuery({
+    queryKey: queryKeys.notificationList,
+    queryFn: ({ pageParam }) => api.notifications.list({ page: pageParam, size: 30 }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => ((last.page + 1) * last.size < last.total ? last.page + 1 : undefined),
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: UUID) => api.notifications.markRead(id),
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.notifications }),
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.notifications.markAllRead(),
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.notifications }),
+  });
+}

@@ -4,11 +4,13 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth.service';
 import { ConfirmService } from './core/confirm.service';
+import { NotificationService } from './core/notification.service';
 import { ToastService } from './core/toast.service';
+import { NotificationBellComponent } from './shared/notification-bell.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink],
+  imports: [RouterOutlet, RouterLink, NotificationBellComponent],
   host: { '(document:click)': 'menuOpen.set(false)' },
   templateUrl: './app.html',
 })
@@ -18,6 +20,8 @@ export class App {
   protected readonly toast = inject(ToastService);
   protected readonly confirm = inject(ConfirmService);
   protected readonly menuOpen = signal(false);
+  /** Starts unread polling (and the "(3) Condo" title) as soon as the app boots. */
+  private readonly notifications = inject(NotificationService);
 
   private readonly url = toSignal(
     this.router.events.pipe(

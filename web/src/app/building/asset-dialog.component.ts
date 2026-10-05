@@ -10,11 +10,12 @@ import { ToastService } from '../core/toast.service';
 import { ASSET_NAME_MAX, ASSET_NOTES_MAX, SpaceOption, assetTypeIcon, prefillName, problemSummary } from '../shared/assets';
 import { FieldErrorComponent } from '../shared/field-error.component';
 import { ModalComponent } from '../shared/modal.component';
+import { QrPreviewComponent } from '../shared/qr-preview.component';
 
 /** Create or edit one asset. Archive/restore live here too for existing assets. */
 @Component({
   selector: 'app-asset-dialog',
-  imports: [ReactiveFormsModule, RouterLink, ModalComponent, FieldErrorComponent],
+  imports: [ReactiveFormsModule, RouterLink, ModalComponent, FieldErrorComponent, QrPreviewComponent],
   template: `
     <app-modal [title]="asset() ? 'Edit asset' : 'Add asset'" [wide]="true" (closed)="closed.emit()">
       @if (isArchived()) {
@@ -78,6 +79,15 @@ import { ModalComponent } from '../shared/modal.component';
             <app-field-error [control]="form.controls.spaceId" label="Location" />
           </label>
         </div>
+
+        @if (current(); as cur) {
+          @if (!cur.archived) {
+            <details class="qr-details">
+              <summary>QR code for this item</summary>
+              <app-qr-preview [asset]="cur" />
+            </details>
+          }
+        }
 
         <label class="field">
           <span>Notes <small class="muted">(optional — model, serial number, where exactly…)</small></span>

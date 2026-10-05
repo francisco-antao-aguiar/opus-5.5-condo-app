@@ -5,7 +5,8 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(Jwt jwt, Cors cors, Links links, Invitations invitations, Issues issues) {
+public record AppProperties(Jwt jwt, Cors cors, Links links, Invitations invitations, Issues issues,
+        Notifications notifications, Push push) {
 
     public record Jwt(String secret, String issuer, Duration accessTokenTtl, Duration refreshTokenTtl) {
     }
@@ -23,5 +24,13 @@ public record AppProperties(Jwt jwt, Cors cors, Links links, Invitations invitat
 
     /** {@code stuckAfter}: how long an issue may sit in REPORTED before the dashboard flags it. */
     public record Issues(Duration stuckAfter) {
+    }
+
+    /** {@code async=false} delivers on the publishing thread (tests). */
+    public record Notifications(boolean async) {
+    }
+
+    /** Expo push. Disabled → pushes are logged instead of sent. */
+    public record Push(boolean enabled, String expoUrl, String accessToken) {
     }
 }

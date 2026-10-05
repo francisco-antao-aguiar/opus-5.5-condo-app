@@ -11,6 +11,14 @@
 
 <p class="muted small">Lights, doors, the elevator, the boiler… Residents report problems on these. Private assets are only shown to people with access to that space.</p>
 
+@if (selected().size) {
+  <div class="selection-bar">
+    <strong>{{ selected().size }} selected</strong>
+    <button type="button" class="btn btn-primary btn-sm" (click)="printLabels()">🖨 Print QR labels</button>
+    <button type="button" class="btn btn-sm" (click)="clearSelection()">Clear</button>
+  </div>
+}
+
 <div class="toolbar asset-filters">
   <label class="filter">
     <span class="sr-only">Space</span>
@@ -55,6 +63,16 @@
     <table class="table members-table assets-table">
       <thead>
         <tr>
+          <th class="cell-check">
+            <input
+              type="checkbox"
+              aria-label="Select all shown items"
+              [checked]="selState() === 'all'"
+              [indeterminate]="selState() === 'some'"
+              [disabled]="!selectableIds().length"
+              (change)="toggleAll()"
+            />
+          </th>
           <th>Asset</th>
           <th>Location</th>
           <th>Visibility</th>
@@ -64,7 +82,12 @@
       </thead>
       <tbody>
         @for (a of assets(); track a.id) {
-          <tr [class.inactive]="a.archived">
+          <tr [class.inactive]="a.archived" [class.selected-row]="selected().has(a.id)">
+            <td class="cell-check">
+              @if (!a.archived) {
+                <input type="checkbox" [attr.aria-label]="'Select ' + a.name" [checked]="selected().has(a.id)" (change)="toggle(a.id)" />
+              }
+            </td>
             <td data-label="Asset">
               <span class="asset-name">
                 <span class="asset-icon" [title]="a.typeName" aria-hidden="true">{{ icon(typeByCode().get(a.type)?.icon) }}</span>
@@ -99,6 +122,7 @@
                 }
               } @else {
                 <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'issues', 'new']" [queryParams]="{ asset: a.id }" title="Report a problem with this item">🚩 Report</a>
+                <button type="button" class="btn btn-sm" title="QR code" (click)="qrFor.set(a)">▦ QR</button>
                 @if (canEdit(a)) {
                   <button type="button" class="btn btn-sm" (click)="editing.set(a)">Edit</button>
                 }
@@ -107,7 +131,7 @@
           </tr>
         } @empty {
           <tr>
-            <td colspan="5" class="muted">
+            <td colspan="6" class="muted">
               @if (filtered()) {
                 No assets match these filters.
                 <button type="button" class="btn btn-sm" (click)="clearFilters()">Clear filters</button>
@@ -149,4 +173,10 @@
     (created)="reload()"
     (closed)="bulkOpen.set(false)"
   />
+}
+
+@if (qrFor(); as a) {
+  <app-modal [title]="'QR code · ' + a.name" (closed)="qrFor.set(null)">
+    <app-qr-preview [asset]="a" />
+  </app-modal>
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { API_URL } from '../../../api/config';
 import { useAuth } from '../../../auth/AuthProvider';
@@ -7,6 +7,7 @@ import { Button } from '../../../components/Button';
 import { Card, ScrollScreen, SectionTitle } from '../../../components/Layout';
 import { QueryGate } from '../../../components/StateView';
 import { roleLabel } from '../../../lib/format';
+import { registerPush, usePushStatus } from '../../../notifications/push';
 import { spacing, useTheme } from '../../../theme';
 
 export default function ProfileScreen() {
@@ -56,6 +57,8 @@ export default function ProfileScreen() {
               )}
             </Card>
 
+            <PushSection userId={me.user.id} />
+
             <SectionTitle>About</SectionTitle>
             <Card>
               <Text style={{ color: colors.textMuted }}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
@@ -80,3 +83,46 @@ const styles = StyleSheet.create({
   line: { gap: 2, paddingVertical: spacing.xs },
   lineTitle: { fontSize: 16, fontWeight: '600' },
 });
+
+/** Push status + a one-line hint when push can't work here (simulator, no EAS projectId, web). */
+function PushSection({ userId }: { userId: string }) {
+  const { colors } = useTheme();
+  const push = usePushStatus();
+  let text: string;
+  let action: { label: string; onPress: () => void } | null = null;
+  switch (push.kind) {
+    case 'registered':
+      text = 'On — you’ll get a notification when your reports change.';
+      break;
+    case 'unsupported':
+      text =
+        push.reason === 'no-project-id'
+          ? 'Push notifications need an EAS project id — see README.'
+          : push.reason === 'simulator'
+            ? 'Push notifications only work on a physical device.'
+            : 'Push notifications are available in the mobile app. Updates still appear in Inbox.';
+      break;
+    case 'denied':
+      text = 'Off — turn notifications on for Condo in your phone’s Settings.';
+      if (Platform.OS !== 'web') action = { label: 'Open Settings', onPress: () => void Linking.openSettings() };
+      break;
+    case 'undetermined':
+      text = 'Off.';
+      action = { label: 'Turn on notifications', onPress: () => void registerPush(userId, true) };
+      break;
+    case 'error':
+      text = 'Couldn’t set up push on this device (' + push.message + '). Updates still appear in Inbox.';
+      break;
+    default:
+      text = 'Checking…';
+  }
+  return (
+    <>
+      <SectionTitle>Notifications</SectionTitle>
+      <Card>
+        <Text style={{ color: colors.textMuted, fontSize: 15 }}>{text}</Text>
+        {action ? <Button title={action.label} variant="secondary" onPress={action.onPress} /> : null}
+      </Card>
+    </>
+  );
+}

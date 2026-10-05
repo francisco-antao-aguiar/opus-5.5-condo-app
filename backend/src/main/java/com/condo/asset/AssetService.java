@@ -5,6 +5,7 @@ import com.condo.asset.dto.AssetDtos.AssetQuery;
 import com.condo.asset.dto.AssetDtos.BulkCreateAssetsRequest;
 import com.condo.asset.dto.AssetDtos.CreateAssetRequest;
 import com.condo.asset.dto.AssetDtos.UpdateAssetRequest;
+import com.condo.common.config.AppProperties;
 import com.condo.common.error.ApiException;
 import com.condo.common.error.ErrorCodes;
 import com.condo.common.persistence.Versions;
@@ -41,11 +42,12 @@ public class AssetService {
     private final AccessGuard guard;
     private final PermissionService permissions;
     private final SpacePrivacy privacy;
+    private final AppProperties props;
     private final Clock clock;
 
     public AssetService(AssetRepository assets, AssetTypeRepository assetTypes, SpaceRepository spaces,
             CatalogService catalog, AccessGuard guard, PermissionService permissions, SpacePrivacy privacy,
-            Clock clock) {
+            AppProperties props, Clock clock) {
         this.assets = assets;
         this.assetTypes = assetTypes;
         this.spaces = spaces;
@@ -53,6 +55,7 @@ public class AssetService {
         this.guard = guard;
         this.permissions = permissions;
         this.privacy = privacy;
+        this.props = props;
         this.clock = clock;
     }
 
@@ -219,13 +222,15 @@ public class AssetService {
         return new Context(byId, typeNames);
     }
 
-    private static AssetDto toDto(Asset a, Context ctx) {
+    private AssetDto toDto(Asset a, Context ctx) {
         Space space = ctx.space(a.getSpaceId());
         return new AssetDto(a.getId(), a.getBuildingId(), a.getSpaceId(), space != null ? space.getName() : null,
                 space != null ? ctx.pathLabel(space) : null, a.getAssetTypeCode(),
                 ctx.typeNames().getOrDefault(a.getAssetTypeCode(), a.getAssetTypeCode()), a.getName(), a.getNotes(),
                 space != null ? ctx.visibility(space) : null, a.isArchived(), a.getArchivedAt(), a.getCreatedAt(),
-                a.getVersion() != null ? a.getVersion() : 0L);
+                a.getVersion() != null ? a.getVersion() : 0L,
+                props.links().webBaseUrl() + "/r/" + a.getId(),
+                props.links().appScheme() + "://report/asset/" + a.getId());
     }
 
     private static String blankToNull(String s) {

@@ -50,7 +50,7 @@ mvn spring-boot:run
 | admin@demo.test | ADMIN of *Edifício Aurora* (Managed) |
 | manager@demo.test | MANAGER of *Edifício Aurora* |
 | owner@demo.test | OWNER of unit 2B in *Aurora*; OWNER in *Casa do Pátio* (Open) |
-| tenant@demo.test | TENANT of 2B, membership expires in 180 days |
+| tenant@demo.test | TENANT of 2B, membership expires in 180 days (has a few notifications waiting) |
 | owner2@demo.test | OWNER of the 3C/4C duplex in *Aurora*; ADMIN of *Casa do Pátio* |
 | former@demo.test | ex-TENANT of 1A whose membership expired 10 days ago (gets "access expired") |
 
@@ -95,6 +95,21 @@ npx expo start
 
 The API URL comes from `EXPO_PUBLIC_API_URL` and defaults to `http://10.0.2.2:8080/api` on the Android emulator and `http://localhost:8080/api` elsewhere. On a physical device, use your machine's LAN IP. See [`mobile/README.md`](mobile/README.md).
 
+## QR codes, deep links and push notifications
+
+- **QR labels** encode `{APP_WEB_BASE_URL}/r/{assetId}` (an https link in production). Print them from the web app: *Assets* → select → *Print QR labels*.
+- **Deep links:** the app handles `buildingapp://report/asset/{assetId}` and `/r/{assetId}`; the in-app scanner accepts both and bare ids.
+- **Opening the app straight from the phone camera** needs App Links (Android) / Universal Links (iOS) on a real domain:
+  1. set `APP_WEB_BASE_URL=https://your-domain`;
+  2. serve `/.well-known/assetlinks.json` and `/.well-known/apple-app-site-association` from that domain;
+  3. add the domain to `mobile/app.json` (`android.intentFilters` with `autoVerify`, `ios.associatedDomains`).
+
+  Without that, the camera opens the web page, which offers "Open in the app".
+- **Push notifications** are stored in-app always; real pushes are off by default and only logged. To send them:
+  1. give the mobile app an EAS project id (`cd mobile && npx eas-cli@latest init`);
+  2. run on a physical device;
+  3. start the backend with `APP_PUSH_ENABLED=true` (optionally `APP_PUSH_ACCESS_TOKEN` if your Expo account requires one).
+
 ## CORS
 
 The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To change this, set `app.cors.allowed-origins` (or the `APP_CORS_ALLOWED_ORIGINS` environment variable).
@@ -105,5 +120,5 @@ The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To 
 2. **Invitations and membership expiry** ✅
 3. **Asset types, assets, problem catalogs** ✅
 4. **Issue reporting, duplicate detection / "me too", lifecycle and timeline** ✅
-5. QR codes, deep links, push notifications
+5. **QR codes, deep links, push notifications** ✅
 6. Design only: maintenance, announcements, booking, costs (see DESIGN.md)

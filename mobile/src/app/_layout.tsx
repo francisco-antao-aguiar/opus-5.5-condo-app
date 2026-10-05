@@ -6,7 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { queryClient } from '../api/queryClient';
 import { AuthProvider, useAuth } from '../auth/AuthProvider';
 import { LoadingView } from '../components/StateView';
-import { getPendingInvite, isJoinScreenMounted } from '../lib/pendingInvite';
+import { clearPendingRoute, getPendingRoute, isScreenMounted } from '../lib/pendingRoute';
+import { useNotificationResponses } from '../notifications/push';
 import { useTheme } from '../theme';
 
 export default function RootLayout() {
@@ -45,7 +46,8 @@ export default function RootLayout() {
  */
 function RootNavigator() {
   const { status } = useAuth();
-  usePendingInviteRedirect(status);
+  usePendingRouteRedirect(status);
+  useNotificationResponses(status);
   if (status === 'loading') return <LoadingView />;
   const signedIn = status === 'signedIn';
   return (
@@ -65,28 +67,40 @@ function RootNavigator() {
         name="join/[code]"
         options={{ headerShown: true, title: 'Invitation', headerBackButtonDisplayMode: 'minimal' }}
       />
+      {/* QR / deep links, also outside the guards: buildingapp://report/asset/{id} and the web label path /r/{id}. */}
+      <Stack.Screen
+        name="report/asset/[assetId]"
+        options={{ headerShown: true, title: 'Report a problem', headerBackButtonDisplayMode: 'minimal' }}
+      />
+      <Stack.Screen
+        name="r/[assetId]"
+        options={{ headerShown: true, title: 'Report a problem', headerBackButtonDisplayMode: 'minimal' }}
+      />
     </Stack>
   );
 }
 
 /**
- * After signing in or registering, return to the invitation the user opened while signed out.
- * The guard flip itself drops the (auth) screens; this then (re)opens /join/{code}.
+ * After signing in or registering, continue to where the user was going while signed out (an
+ * invitation, a scanned QR code, a notification). The guard flip itself drops the (auth) screens;
+ * this then (re)opens the pending route.
  */
-function usePendingInviteRedirect(status: 'loading' | 'signedOut' | 'signedIn') {
+function usePendingRouteRedirect(status: 'loading' | 'signedOut' | 'signedIn') {
   const previous = useRef(status);
   useEffect(() => {
     const was = previous.current;
     previous.current = status;
     if (status !== 'signedIn' || was !== 'signedOut') return;
     let cancelled = false;
-    void getPendingInvite().then((code) => {
+    void getPendingRoute().then((path) => {
       // Next tick: let the protected-route redirect settle first.
-      if (!code || cancelled) return;
+      if (!path || cancelled) return;
       setTimeout(() => {
-        // The join screen is still in the stack (the guard flip just popped login off it): nothing to do.
-        if (isJoinScreenMounted(code)) return;
-        router.navigate(`/join/${code}`);
+        // Join / report screens clear it themselves when done; other targets are one-shot.
+        if (path.startsWith('/buildings/')) void clearPendingRoute();
+        // The screen is still in the stack (the guard flip just popped login off it): nothing to do.
+        if (isScreenMounted(path)) return;
+        router.navigate(path as never);
       }, 0);
     });
     return () => {

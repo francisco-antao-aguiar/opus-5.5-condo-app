@@ -95,3 +95,25 @@ shared client after `shared/dist` is rebuilt (the error is "does not provide an 
   * Entry points: the Issues page, asset rows, and the asset dialog.
 * **Review "Other"** (`catalog/other`, needs `CATALOG_EDIT`) promotes recurring free-text problems into the catalog and
   re-files matching issues.
+
+## QR codes and notifications (phase 5)
+
+* **QR labels** — on the Assets page, tick items (the header box selects every item currently shown), then choose
+  **Print QR labels**. The sheet at `assets/labels` is A4 and comes in two sizes: *Small 3×8* (70×37 mm) and *Large 2×4*
+  (105×74 mm).
+  * Each label has the QR of `asset.qrUrl`, the item name, its location, the building and "Scan to report a problem".
+  * Archived items are left out, with a note.
+  * Print at 100% scale with no margins, or "Save as PDF".
+  * Each asset row (▦ QR) and the asset dialog show a QR preview with *Download SVG*, *Copy link* and *Print label*.
+  * QR codes are drawn with the `qrcode` package, loaded lazily so it only ships with the pages that need it.
+* **`/r/:assetId`** — the link printed on labels. It needs sign-in (you come back here after login) and calls
+  `qr.resolve`.
+  * Shows the item, its open issues (Me too / "You're on it") and **Report a problem with this**, which opens the report
+    flow at the problem step.
+  * On phones it also shows *Open in the app*.
+  * If you're not a member, the page names the building and points to "Join with a code". Expired memberships, archived
+    items and unknown codes each get their own message.
+* **Notifications** — a bell in the header shows the unread count. It refreshes every 60 s, on window focus and after
+  each navigation, and the tab title shows the count, e.g. "(3) Issues · Condo".
+  * The dropdown lists the latest 10. Clicking one marks it read and opens its link.
+  * `/notifications` lists everything, grouped by day, with paging and an "Unread only" filter.

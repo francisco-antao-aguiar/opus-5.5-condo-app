@@ -36,7 +36,7 @@ public final class AssetDtos {
 
     public record AssetDto(UUID id, UUID buildingId, UUID spaceId, String spaceName, String spacePath, String type,
             String typeName, String name, String notes, Visibility effectiveVisibility, boolean archived,
-            Instant archivedAt, Instant createdAt, long version) {
+            Instant archivedAt, Instant createdAt, long version, String qrUrl, String deepLink) {
     }
 
     public record CreateAssetRequest(

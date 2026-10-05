@@ -89,3 +89,30 @@ In Expo Go, use `exp://<lan-ip>:8081/--/join/ABCDEFGH` instead. On web, open `ht
 
 Updates send the entity's `version`. A `409 CONFLICT` shows "Someone else changed this — showing the latest"
 and the data is refetched.
+
+## QR codes and deep links
+
+Asset labels encode the web link `{web}/r/{assetId}`; the app also handles `buildingapp://report/asset/{assetId}`
+and the web path `/r/{assetId}` (same screen). Both work signed out: the target is remembered and opened after
+sign-in. In the app, **Scan** (Buildings tab header, or the first step of "Report a problem") scans asset labels
+and invitation QR codes; codes can also be typed.
+
+```bash
+npx uri-scheme open buildingapp://report/asset/<assetId> --android
+adb shell am start -W -a android.intent.action.VIEW -d "buildingapp://report/asset/<assetId>"
+# web
+open http://localhost:8081/r/<assetId>
+```
+
+The camera scanner needs a device or emulator with a camera (Expo Go works for scanning).
+
+## Push notifications
+
+- Push only works on **physical devices**, in a **development build** (Expo Go on Android has no remote push since SDK 53).
+- The Expo push token needs an EAS **projectId**: run `npx eas-cli@latest init` in `mobile/` (writes
+  `expo.extra.eas.projectId` to app.json), then build with `npx eas-cli@latest build --profile development`.
+  Android also needs FCM credentials configured in EAS.
+- Without a projectId, on a simulator or on web, push is skipped (Profile shows why); in-app notifications
+  (Inbox tab, polled every 60 s and on foreground) still work everywhere.
+- Tapping a notification opens `data.link` (only `/buildings/...` routes are followed), including from a cold start.
+- Sign-out unregisters the device token before clearing the session.

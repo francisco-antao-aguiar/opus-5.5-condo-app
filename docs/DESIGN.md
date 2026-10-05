@@ -47,13 +47,6 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 | **Membership** | id, building, user, role, unitSpace?, status, expiresAt? | One per (building, user). `expiresAt` is the *membership* expiry; checked at every authorization. |
 | **Space** | id, buildingId, parentId, type, name, sortOrder, visibility?, path, depth | Generic tree node. |
 
-### Phase 5 (planned — fields reserved, not yet created)
-
-| Entity | Key fields |
-|---|---|
-| **PushToken** (P5) | id, userId, expoPushToken, platform, lastSeenAt |
-| **Notification** (P5) | id, userId, buildingId, type, payload JSON, readAt, createdAt |
-
 ### Phase 2 (implemented)
 
 | Entity | Key fields | Notes |
@@ -113,6 +106,28 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 * **Photos**: max 5 per issue, 10 MB each, JPEG/PNG/WebP/HEIC (checked by content sniffing, not just the header). Served via `/api/files/photos/{id}?exp=&sig=` — HMAC-signed, 1-hour links — so `<img>` tags work without an Authorization header. Uploader or triager can delete.
 * **Notifications (phase 5 hook)**: every timeline event publishes an `IssueActivity` application event after commit, carrying the issue and the affected users. Phase 5 listens to it for push + in-app notifications; nothing in phase 4 depends on it.
 * **Spaces**: a space whose subtree has open issues can't be deleted (409 `SPACE_HAS_OPEN_ISSUES`); resolved issues keep their `locationLabel` snapshot with `spaceId = null`.
+
+### Phase 5 (implemented)
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| **PushToken** | id, userId, token (unique), platform, deviceName?, createdAt, lastSeenAt | Expo push token per device. Re-registering a token moves it to the current user (shared phones); tokens Expo reports as `DeviceNotRegistered` are deleted. |
+| **Notification** | id, userId, buildingId, issueId?, type, title, body, link, readAt?, createdAt | The in-app list. `link` is an app-relative route identical on web and mobile (`/buildings/{b}/issues/{i}`). |
+
+**QR codes**
+* Every asset's id is its QR identity (stable since phase 3; archived assets keep it). `AssetDto.qrUrl` = `{webBaseUrl}/r/{assetId}` is what gets printed; `AssetDto.deepLink` = `buildingapp://report/asset/{assetId}` is the app route.
+* **Why the label encodes the web URL rather than the custom scheme:** phone camera apps reliably open https links, and the label must still work for someone without the app installed. The web route `/r/:assetId` shows the report flow for that asset (after sign-in) and offers "Open in the app" via the deep link. In production, register the web domain as Android App Links / iOS Universal Links so the camera opens the app directly — that needs a real domain (`assetlinks.json` / `apple-app-site-association`), not possible on localhost.
+* `GET /assets/{id}/resolve` (authenticated, building-less) answers with the asset, its building, `canReport` and its open issues. Not a member → 403 `NOT_A_MEMBER` with `buildingName` so the app can say whose it is; private item of another unit or unknown id → 404; archived → 410 `ASSET_ARCHIVED`. The asset id carries no secret: the answer depends entirely on the caller's membership.
+* `parseAssetCode()` in `@condo/shared` accepts the web link, the app link or a bare id, so the in-app scanner, deep links and manual entry share one parser.
+* **Label sheet (web):** admins select assets → printable A4 sheet (QR, item name, location, building, "Scan to report a problem"); "Save as PDF" from the print dialog covers the PDF case.
+
+**Notifications**
+* Phase 4's `IssueActivity` (published after commit, with the issue's affected people minus the actor) feeds `NotificationService`, which runs on a background executor so requests never wait for delivery. For each recipient it stores an in-app **Notification** and sends an **Expo push** to the user's registered devices.
+* Who is notified:
+  * `ISSUE_STATUS_CHANGED`, `ISSUE_MERGED`, `ISSUE_COMMENTED` → reporter + "me too" people (never the actor). Status changes are required by the spec; comments are included because silence after a reply breaks "reporters always get feedback".
+  * `ISSUE_REPORTED` → members who may **triage** that issue (for an unshared private issue: the unit's own members), never the reporter.
+* Push goes through `PushSender`: `ExpoPushSender` (batches of 100 to the Expo push API, deletes tokens rejected as `DeviceNotRegistered`) when `app.push.enabled=true`, otherwise a logging sender (dev default, tests). An Expo access token can be set via `APP_PUSH_ACCESS_TOKEN`.
+* Out of scope for now: per-user notification preferences and quiet hours (a `notification_preference` table keyed by user × type would slot in front of delivery).
 
 ### Phase 6 compatibility (design only)
 
@@ -238,6 +253,18 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 | GET | `/buildings/{b}/issues/other-texts` | `CATALOG_EDIT` |
 | POST | `/buildings/{b}/issues/other-texts/promote` | `CATALOG_EDIT` |
 
+### Phase 5 endpoints
+
+| Method | Path | Auth / action |
+|---|---|---|
+| GET | `/assets/{assetId}/resolve` | authenticated; membership of the asset's building |
+| GET | `/me/notifications?unreadOnly=&page=&size=` | authenticated (own notifications only) |
+| GET | `/me/notifications/unread-count` | authenticated |
+| POST | `/me/notifications/{id}/read` | owner of the notification |
+| POST | `/me/notifications/read-all` | authenticated |
+| POST | `/me/push-tokens` | authenticated — register/move a device token |
+| DELETE | `/me/push-tokens?token=` | authenticated — on logout |
+
 ## 4. Assumptions
 
 1. **One membership per user per building**, with at most one unit. An owner of two units (flat + garage box) would need a `membership_unit` join table — easy to add, but it changes the `OWN_UNIT` check to "any of my units".
@@ -254,4 +281,6 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 12. **Reports without an asset** are allowed on a space with free text ("something else here"), so residents are never stuck when equipment isn't registered.
 13. **Duplicate detection is per asset** (same asset + same problem, or same normalized "Other" text). Space-level reports aren't deduplicated automatically; triagers merge them.
 14. **The reporter may close their own issue** ("it fixed itself") and reopen it; neighbours who said "me too" may reopen. Everything else needs `ISSUE_TRIAGE`.
+15. **Printed QR labels encode the https web link**, which opens the app when installed (with App/Universal Links in production) and falls back to the web report flow otherwise; the custom `buildingapp://` scheme is the app's internal route and is also accepted by the scanner.
+16. **Comment notifications** go to the same audience as status changes; new-issue notifications go to triagers. Notification preferences are not in scope yet.
 

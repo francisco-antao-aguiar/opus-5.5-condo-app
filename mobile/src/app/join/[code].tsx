@@ -11,7 +11,7 @@ import { useAcceptInvitation, useInvitationPreview } from '../../hooks/queries';
 import { errorMessage } from '../../lib/errors';
 import { capitalize, formatDate, invitationAccessText, roleLabel } from '../../lib/format';
 import { INVITE_CODE_LENGTH } from '../../lib/inviteCode';
-import { clearPendingInvite, registerJoinScreen, setPendingInvite } from '../../lib/pendingInvite';
+import { clearPendingInvite, joinPath, registerScreen, setPendingInvite } from '../../lib/pendingRoute';
 import { spacing, useTheme } from '../../theme';
 
 type Dead = 'EXPIRED' | 'REVOKED' | 'EXHAUSTED' | 'NOT_FOUND' | 'MALFORMED' | 'INVALID' | 'TOO_MANY';
@@ -53,7 +53,7 @@ export default function JoinScreen() {
   const accept = useAcceptInvitation();
   const [alreadyMember, setAlreadyMember] = useState(false);
 
-  useEffect(() => (wellFormed ? registerJoinScreen(code) : undefined), [wellFormed, code]);
+  useEffect(() => (wellFormed ? registerScreen(joinPath(code)) : undefined), [wellFormed, code]);
 
   // Remember the code while signed out, so login/registration lands back here.
   useEffect(() => {

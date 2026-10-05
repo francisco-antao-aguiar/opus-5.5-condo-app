@@ -73,6 +73,7 @@ export type ErrorCode =
   | 'PHOTO_LIMIT'
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_MEDIA_TYPE'
+  | 'INVALID_PUSH_TOKEN'
   | 'INTERNAL_ERROR'
   | (string & {});
 
@@ -91,6 +92,8 @@ export interface ApiProblem {
   errors?: FieldError[];
   /** Present on 409 DUPLICATE_ISSUE: the open issue to offer "Me too" on instead. */
   duplicate?: DuplicateIssueInfo;
+  /** Present on 403 NOT_A_MEMBER from QR resolve: whose item this is. */
+  buildingName?: string;
 }
 
 // ---------- auth ----------
@@ -443,6 +446,10 @@ export interface AssetDto {
   archivedAt: Instant | null;
   createdAt: Instant;
   version: number;
+  /** What the printed QR label encodes: a web link that also opens the app, e.g. https://…/r/{id}. */
+  qrUrl: string;
+  /** App deep link, e.g. buildingapp://report/asset/{id}. */
+  deepLink: string;
 }
 
 export interface CreateAssetRequest {
@@ -693,5 +700,58 @@ export interface PromoteOtherTextResponse {
   problemType: ProblemTypeDto;
   /** Issues re-filed under the new catalog entry. */
   reclassifiedIssues: number;
+}
+
+// ---------- QR codes ----------
+
+/**
+ * Result of scanning an asset's QR code (GET /assets/{id}/resolve).
+ * Errors: 404 NOT_FOUND (unknown code, or a private item you can't see), 403 NOT_A_MEMBER with `buildingName`
+ * (show "This belongs to X — ask for an invite"), 403 MEMBERSHIP_EXPIRED, 410 ASSET_ARCHIVED.
+ */
+export interface ResolvedAsset {
+  asset: AssetDto;
+  buildingId: UUID;
+  buildingName: string;
+  /** ISSUE_REPORT allowed here; if false, show the asset and its issues read-only. */
+  canReport: boolean;
+  /** Open issues on it the caller can see, most urgent first ("already reported?"). */
+  openIssues: IssueSummaryDto[];
+}
+
+// ---------- notifications ----------
+
+export type NotificationType = 'ISSUE_REPORTED' | 'ISSUE_STATUS_CHANGED' | 'ISSUE_COMMENTED' | 'ISSUE_MERGED';
+
+/**
+ * In-app notification. Opening the issue (GET /buildings/{b}/issues/{i}) marks the viewer's notifications about it
+ * as read, so clients don't need to call markRead when navigating from a notification. Web has no push: poll
+ * unreadCount.
+ */
+export interface NotificationDto {
+  id: UUID;
+  type: NotificationType;
+  buildingId: UUID;
+  buildingName: string;
+  issueId: UUID | null;
+  title: string;
+  body: string;
+  /** App-relative route, identical on web and mobile, e.g. "/buildings/{b}/issues/{i}". */
+  link: string;
+  read: boolean;
+  createdAt: Instant;
+}
+
+export interface UnreadCount {
+  unread: number;
+}
+
+export type PushPlatform = 'ios' | 'android' | 'web';
+
+export interface RegisterPushTokenRequest {
+  /** Expo push token, e.g. "ExponentPushToken[xxxxxxxx]". Re-registering moves it to the current user. */
+  token: string;
+  platform: PushPlatform;
+  deviceName?: string | null;
 }
 

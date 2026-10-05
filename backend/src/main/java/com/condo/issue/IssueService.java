@@ -188,9 +188,11 @@ public class IssueService {
 
     // ===================== reading =====================
 
-    @Transactional(readOnly = true)
+    /** Viewing an issue also marks the viewer's notifications about it as read (see IssueViewed). */
     public IssueDto get(UUID buildingId, UUID issueId) {
-        return detail(load(buildingId, issueId));
+        Loaded l = load(buildingId, issueId);
+        publisher.publishEvent(new IssueViewed(issueId, userId(l)));
+        return detail(l);
     }
 
     /** Open issues on an asset, for "already reported?" before the user picks a problem. */
@@ -432,7 +434,7 @@ public class IssueService {
                 .filter(u -> !u.equals(event.getActorUserId()))
                 .collect(Collectors.toCollection(HashSet::new));
         publisher.publishEvent(new IssueActivity(issue.getBuildingId(), issue.getId(), issue.getNumber(),
-                event.getType(), issue.getStatus(), event.getActorUserId(), audience));
+                event.getId(), event.getType(), issue.getStatus(), event.getActorUserId(), audience));
     }
 
     record Loaded(Membership member, Issue issue, Space space) {
