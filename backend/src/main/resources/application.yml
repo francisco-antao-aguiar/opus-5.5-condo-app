@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: condo-backend
+  profiles:
+    default: dev
+  datasource:
+    # File-based H2 in PostgreSQL compatibility mode so the Flyway scripts stay portable.
+    url: jdbc:h2:file:./data/condo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;AUTO_SERVER=TRUE
+    username: sa
+    password: ""
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  h2:
+    console:
+      enabled: false
+  web:
+    # Fallback when the client sends no Accept-Language (validation messages are localized).
+    locale: en
+  jackson:
+    default-property-inclusion: always
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+  error:
+    include-message: never
+
+app:
+  jwt:
+    # Base64-encoded HMAC key (>= 256 bits). MUST be overridden outside dev via APP_JWT_SECRET.
+    secret: ${APP_JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWNoYW5nZS1tZS1pbi1wcm9kdWN0aW9uLTAxMjM0NTY3ODk=}
+    issuer: condo-app
+    access-token-ttl: 15m
+    refresh-token-ttl: 30d
+  cors:
+    allowed-origins: http://localhost:4200,http://localhost:8081,http://localhost:19006
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs

@@ -1,0 +1,67 @@
+@if (auth.user(); as user) {
+  <header class="app-header">
+    <a routerLink="/buildings" class="brand" aria-label="Condo home"><span class="brand-mark">▦</span> Condo</a>
+
+    @if (auth.memberships().length) {
+      <label class="switcher">
+        <span class="sr-only">Current building</span>
+        <select [value]="currentBuildingId()" (change)="switchBuilding($any($event.target).value)">
+          <option value="">All buildings</option>
+          @for (m of auth.memberships(); track m.buildingId) {
+            <option [value]="m.buildingId" [selected]="m.buildingId === currentBuildingId()">{{ m.buildingName }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    <div class="user-menu">
+      <button type="button" class="avatar" [attr.aria-expanded]="menuOpen()" aria-haspopup="menu" (click)="toggleMenu($event)">
+        {{ initials() }}
+      </button>
+      @if (menuOpen()) {
+        <div class="menu" role="menu" (click)="$event.stopPropagation()">
+          <div class="menu-user">
+            <strong>{{ user.displayName }}</strong>
+            <span class="muted">{{ user.email }}</span>
+          </div>
+          <a role="menuitem" routerLink="/buildings" (click)="menuOpen.set(false)">My buildings</a>
+          <button type="button" role="menuitem" (click)="logout()">Sign out</button>
+        </div>
+      }
+    </div>
+  </header>
+}
+
+<main class="app-main">
+  <router-outlet />
+</main>
+
+<div class="toasts" aria-live="polite">
+  @for (t of toast.toasts(); track t.id) {
+    <div class="toast" [class]="'toast toast-' + t.kind" role="status">
+      <div>
+        <strong>{{ t.title }}</strong>
+        @if (t.detail) {
+          <p>{{ t.detail }}</p>
+        }
+      </div>
+      <button type="button" class="btn-icon" aria-label="Dismiss" (click)="toast.dismiss(t.id)">✕</button>
+    </div>
+  }
+</div>
+
+@if (confirm.current(); as c) {
+  <div class="modal-backdrop" (click)="confirm.answer(false)"></div>
+  <div class="modal modal-sm" role="alertdialog" aria-modal="true" [attr.aria-label]="c.title" (keydown.escape)="confirm.answer(false)">
+    <header class="modal-head"><h2>{{ c.title }}</h2></header>
+    @if (c.message) {
+      <div class="modal-body"><p>{{ c.message }}</p></div>
+    }
+    <footer class="modal-foot">
+      <button type="button" class="btn" (click)="confirm.answer(false)">Cancel</button>
+      <button type="button" class="btn" [class.btn-danger]="c.danger" [class.btn-primary]="!c.danger" (click)="confirm.answer(true)" autofocus>
+        {{ c.confirmText ?? 'Confirm' }}
+      </button>
+    </footer>
+  </div>
+}

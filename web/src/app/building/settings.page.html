@@ -1,0 +1,111 @@
+<div class="page-head">
+  <h1>Settings</h1>
+</div>
+
+<section class="card">
+  <h2>Building</h2>
+  @if (!canEdit()) {
+    <p class="alert alert-info">Only building admins can change these settings.</p>
+  }
+  <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <div class="grid-2">
+      <label class="field">
+        <span>Name</span>
+        <input type="text" formControlName="name" />
+        <app-field-error [control]="form.controls.name" label="Name" />
+      </label>
+      <label class="field">
+        <span>Address</span>
+        <input type="text" formControlName="address" />
+        <app-field-error [control]="form.controls.address" label="Address" />
+      </label>
+    </div>
+
+    <fieldset class="field">
+      <legend>Governance mode</legend>
+      <div class="mode-options">
+        @for (m of modes(); track m.code) {
+          <label class="mode-option" [class.selected]="selectedMode() === m.code" [class.disabled]="!canEdit()">
+            <input type="radio" formControlName="governanceMode" [value]="m.code" />
+            <span>
+              <strong>{{ m.name }}</strong>
+              @if (m.code === currentMode()) {
+                <em class="badge">current</em>
+              }
+              <small>{{ m.description }}</small>
+            </span>
+          </label>
+        } @empty {
+          <p class="muted">Loading modes…</p>
+        }
+      </div>
+      @if (changeCount() > 0) {
+        <p class="alert alert-warn">
+          Switching to <strong>{{ modeName(selectedMode()) }}</strong> changes {{ changeCount() }} permission{{ changeCount() === 1 ? '' : 's' }} —
+          highlighted in the table below.
+        </p>
+      }
+      <app-field-error [control]="form.controls.governanceMode" label="Governance mode" />
+    </fieldset>
+
+    @if (saveError(); as e) {
+      <div class="alert alert-error" role="alert"><strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}</div>
+    }
+    @if (canEdit()) {
+      <div class="actions">
+        <button type="submit" class="btn btn-primary" [disabled]="saving() || form.pristine">{{ saving() ? 'Saving…' : 'Save changes' }}</button>
+      </div>
+    }
+  </form>
+</section>
+
+<section class="card">
+  <h2>Who can do what</h2>
+  <p class="muted small">
+    Permissions per governance mode. ✓ = anywhere in the building; “own unit” = only inside the member's own unit.
+  </p>
+  @if (loadError(); as e) {
+    <div class="alert alert-error">{{ e.title }}</div>
+  } @else if (modes().length) {
+    <div class="table-wrap">
+      <table class="table policy-table">
+        <thead>
+          <tr>
+            <th rowspan="2" class="sticky-col">Action</th>
+            @for (m of orderedModes(); track m.code) {
+              <th [attr.colspan]="matrix().roles.length" class="mode-head" [class.selected]="m.code === (selectedMode() || currentMode())">
+                {{ m.name }}
+                @if (m.code === currentMode()) {
+                  <em class="badge">current</em>
+                }
+              </th>
+            }
+          </tr>
+          <tr>
+            @for (m of orderedModes(); track m.code) {
+              @for (r of matrix().roles; track r; let first = $first) {
+                <th class="role-head" [class.group-start]="first">{{ roleNames().get(r) ?? r }}</th>
+              }
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of matrix().actions; track a) {
+            <tr>
+              <th scope="row" class="sticky-col">{{ actionLabels[a] || a }}</th>
+              @for (m of orderedModes(); track m.code) {
+                @for (r of matrix().roles; track r; let first = $first) {
+                  <td class="policy-cell" [class.group-start]="first" [class.changed]="changed(m.code, a, r)" [class.scoped]="cellText(m.code, a, r) === 'own unit'">
+                    {{ cellText(m.code, a, r) }}
+                  </td>
+                }
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="muted">Loading…</p>
+  }
+</section>
