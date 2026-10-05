@@ -469,6 +469,9 @@ function PlaceStep({
       {path.length > 1 ? (
         <Text style={{ color: colors.textMuted, fontSize: 15 }}>{path.map((s) => s.name).join(' › ')}</Text>
       ) : null}
+      {isRoot ? (
+        <Button title="📷 Scan the code on the item" variant="secondary" onPress={() => router.push('/scan')} />
+      ) : null}
 
       {homeAssets.length && unit ? (
         <>

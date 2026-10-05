@@ -22,6 +22,19 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/join.page').then((m) => m.JoinPage),
   },
   {
+    // Printed QR labels point here. Sign-in required; authGuard brings people back after login.
+    path: 'r/:assetId',
+    canActivate: [authGuard],
+    title: 'Report a problem · Condo',
+    loadComponent: () => import('./pages/resolve-asset.page').then((m) => m.ResolveAssetPage),
+  },
+  {
+    path: 'notifications',
+    canActivate: [authGuard],
+    title: 'Notifications · Condo',
+    loadComponent: () => import('./pages/notifications.page').then((m) => m.NotificationsPage),
+  },
+  {
     path: 'buildings',
     canActivate: [authGuard],
     title: 'Buildings · Condo',
@@ -52,6 +65,11 @@ export const routes: Routes = [
         path: 'issues/:issueId',
         title: 'Issue · Condo',
         loadComponent: () => import('./building/issue-detail.page').then((m) => m.IssueDetailPage),
+      },
+      {
+        path: 'assets/labels',
+        title: 'QR labels · Condo',
+        loadComponent: () => import('./building/labels.page').then((m) => m.LabelsPage),
       },
       {
         path: 'assets',

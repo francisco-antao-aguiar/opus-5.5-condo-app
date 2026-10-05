@@ -25,6 +25,9 @@ import com.condo.issue.OtherTexts;
 import com.condo.space.SpaceService;
 import com.condo.invitation.InvitationRepository;
 import com.condo.member.Membership;
+import com.condo.notification.Notification;
+import com.condo.notification.NotificationRepository;
+import com.condo.notification.NotificationType;
 import com.condo.member.MembershipRepository;
 import com.condo.space.Space;
 import com.condo.space.SpaceRepository;
@@ -73,6 +76,7 @@ public class DevDataSeeder implements ApplicationRunner {
     private final IssueRepository issues;
     private final IssueAffectedRepository issueAffected;
     private final IssueEventRepository issueEvents;
+    private final NotificationRepository notifications;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -80,7 +84,7 @@ public class DevDataSeeder implements ApplicationRunner {
             MembershipRepository memberships, InvitationRepository invitations, AssetRepository assets,
             ProblemTypeRepository problemTypes, ProblemTypeHiddenRepository hiddenProblemTypes,
             IssueRepository issues, IssueAffectedRepository issueAffected, IssueEventRepository issueEvents,
-            PasswordEncoder passwordEncoder, Clock clock) {
+            NotificationRepository notifications, PasswordEncoder passwordEncoder, Clock clock) {
         this.users = users;
         this.buildings = buildings;
         this.spaces = spaces;
@@ -92,6 +96,7 @@ public class DevDataSeeder implements ApplicationRunner {
         this.issues = issues;
         this.issueAffected = issueAffected;
         this.issueEvents = issueEvents;
+        this.notifications = notifications;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
     }
@@ -192,17 +197,17 @@ public class DevDataSeeder implements ApplicationRunner {
                 (x, y) -> x));
         Map<UUID, Space> spaceIndex = s.stream().collect(Collectors.toMap(Space::getId, Function.identity()));
         Instant t = clock.instant();
-        Issue lobbyLight = issue(aurora, byName.get("Lobby ceiling light"), spaceIndex, LIGHT_FLICKERING, null,
+        Issue lobbyIssue = issue(aurora, byName.get("Lobby ceiling light"), spaceIndex, LIGHT_FLICKERING, null,
                 "Worse in the evening", tenant, t.minus(Duration.ofHours(30)));
-        meToo(lobbyLight, owner, t.minus(Duration.ofHours(20)));
-        meToo(lobbyLight, owner2, t.minus(Duration.ofHours(5)));
+        meToo(lobbyIssue, owner, t.minus(Duration.ofHours(20)));
+        meToo(lobbyIssue, owner2, t.minus(Duration.ofHours(5)));
 
-        Issue elevator = issue(aurora, byName.get("Elevator"), spaceIndex, ELEVATOR_DOOR, null, null, owner2,
+        Issue elevatorIssue = issue(aurora, byName.get("Elevator"), spaceIndex, ELEVATOR_DOOR, null, null, owner2,
                 t.minus(Duration.ofDays(2)));
-        meToo(elevator, tenant, t.minus(Duration.ofDays(1)));
-        status(elevator, admin, IssueStatus.ACKNOWLEDGED, "Technician booked for tomorrow 9:00",
+        meToo(elevatorIssue, tenant, t.minus(Duration.ofDays(1)));
+        status(elevatorIssue, admin, IssueStatus.ACKNOWLEDGED, "Technician booked for tomorrow 9:00",
                 t.minus(Duration.ofDays(1)));
-        status(elevator, manager, IssueStatus.IN_PROGRESS, "Technician on site", t.minus(Duration.ofHours(2)));
+        status(elevatorIssue, manager, IssueStatus.IN_PROGRESS, "Technician on site", t.minus(Duration.ofHours(2)));
 
         // Untouched for 4 days: the dashboard flags it as stuck.
         issue(aurora, byName.get("Garage gate"), spaceIndex, remote.getId(), null, null, owner,
@@ -222,6 +227,21 @@ public class DevDataSeeder implements ApplicationRunner {
         status(squeak, manager, IssueStatus.RESOLVED, "Oiled", t.minus(Duration.ofDays(5)));
         issue(aurora, byName.get("Roof access door"), spaceIndex, null, "hinge squeaks!", null, owner2,
                 t.minus(Duration.ofHours(12)));
+
+        // A few notifications so the bell isn't empty on a fresh start (normally created by NotificationService).
+        String link = "/buildings/" + aurora.getId() + "/issues/";
+        notifications.saveAll(List.of(
+                new Notification(admin.getId(), aurora.getId(), lobbyIssue.getId(), NotificationType.ISSUE_REPORTED,
+                        "#1 Flickering", "Lobby ceiling light · Ground floor › Lobby · reported by Tiago Tenant",
+                        link + lobbyIssue.getId(), t.minus(Duration.ofHours(30))),
+                new Notification(tenant.getId(), aurora.getId(), elevatorIssue.getId(),
+                        NotificationType.ISSUE_STATUS_CHANGED, "#2 Door won't close",
+                        "Acknowledged by Ana Admin: Technician booked for tomorrow 9:00",
+                        link + elevatorIssue.getId(), t.minus(Duration.ofDays(1))),
+                new Notification(tenant.getId(), aurora.getId(), elevatorIssue.getId(),
+                        NotificationType.ISSUE_STATUS_CHANGED, "#2 Door won't close",
+                        "Work started by Miguel Manager: Technician on site", link + elevatorIssue.getId(),
+                        t.minus(Duration.ofHours(2)))));
 
         Membership adminM = memberships.save(new Membership(aurora, admin, Role.ADMIN, null, null));
         memberships.save(new Membership(aurora, manager, Role.MANAGER, null, null));

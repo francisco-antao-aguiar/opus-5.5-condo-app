@@ -34,6 +34,22 @@
           "cameraPermission": "Condo lets you take a photo of the problem you are reporting.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Condo uses the camera to scan the QR code on a light, door or other item so you can report a problem with it.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2F5BEA",
+          "defaultChannel": "issue-updates"
+        }
       ]
     ],
     "scheme": "buildingapp"

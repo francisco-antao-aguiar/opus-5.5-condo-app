@@ -1586,6 +1586,324 @@ textarea {
   margin-top: 1rem;
 }
 
+/* ============ notifications ============ */
+.bell-host {
+  position: relative;
+  margin-left: auto;
+}
+.bell-host + .user-menu {
+  margin-left: 0;
+}
+.bell {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+.bell:hover {
+  background: var(--surface-2);
+}
+.bell-badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.bell-menu {
+  width: min(380px, calc(100vw - 1.5rem));
+  max-height: 70vh;
+  overflow-y: auto;
+  z-index: 30;
+}
+.bell-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+.note:hover {
+  background: var(--surface-2);
+}
+.note.unread {
+  background: var(--primary-soft);
+}
+.note-icon {
+  width: 1.4rem;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.note-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.unread-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 0.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+  flex: 0 0 auto;
+}
+.bell-all {
+  display: block;
+  text-align: center;
+  padding: 0.55rem;
+  font-weight: 600;
+}
+.note-group {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 1rem 0 0.4rem;
+}
+.note-list {
+  padding: 0;
+  overflow: hidden;
+}
+.note-list .note:last-child {
+  border-bottom: 0;
+}
+
+/* ============ QR ============ */
+.resolve {
+  text-align: left;
+}
+.resolve-item {
+  display: flex;
+  gap: 0.9rem;
+  align-items: center;
+  margin: 0.25rem 0 1rem;
+}
+.resolve-item h1 {
+  margin: 0;
+}
+.resolve-icon {
+  font-size: 2.6rem;
+}
+.btn-big {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.1rem;
+  margin: 0.5rem 0;
+}
+.qr-preview {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.qr-box {
+  width: 150px;
+  height: 150px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.qr-box svg,
+.qr-label-code svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.qr-side {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.qr-url {
+  overflow-wrap: anywhere;
+}
+.qr-details {
+  margin: 0 0 0.9rem;
+}
+.qr-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.cell-check {
+  width: 2rem;
+}
+.cell-check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
+}
+.table tr.selected-row > td {
+  background: var(--primary-soft);
+}
+
+/* Label sheets: on screen, A4 "paper" previews; in print, exact mm. */
+.sheets {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.sheet {
+  width: 210mm;
+  height: 297mm;
+  background: #fff;
+  color: #000;
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  align-content: start;
+  overflow: hidden;
+}
+.labels-small .sheet {
+  grid-template-columns: repeat(3, 70mm);
+  grid-auto-rows: 37mm;
+}
+.labels-large .sheet {
+  grid-template-columns: repeat(2, 105mm);
+  grid-auto-rows: 74mm;
+}
+.qr-label {
+  display: flex;
+  align-items: center;
+  gap: 3mm;
+  padding: 3mm;
+  overflow: hidden;
+  outline: 0.2mm dashed #ccc;
+  outline-offset: -0.1mm;
+}
+.labels-small .qr-label-code {
+  width: 29mm;
+  height: 29mm;
+  flex: 0 0 29mm;
+}
+.labels-large .qr-label {
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  gap: 2mm;
+}
+.labels-large .qr-label-code {
+  width: 46mm;
+  height: 46mm;
+  flex: 0 0 46mm;
+}
+.qr-label-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6mm;
+  min-width: 0;
+  font-family: var(--font);
+  line-height: 1.15;
+}
+.qr-label-name {
+  font-size: 10pt;
+  overflow-wrap: anywhere;
+}
+.qr-label-loc,
+.qr-label-building {
+  font-size: 7.5pt;
+  color: #333;
+  overflow-wrap: anywhere;
+}
+.qr-label-cta {
+  font-size: 7pt;
+  font-weight: 700;
+  margin-top: 0.8mm;
+}
+.labels-large .qr-label-name {
+  font-size: 13pt;
+}
+.labels-large .qr-label-loc,
+.labels-large .qr-label-building {
+  font-size: 9pt;
+}
+.labels-large .qr-label-cta {
+  font-size: 9pt;
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  .app-header,
+  .shell-nav,
+  .no-print,
+  .toasts,
+  .modal,
+  .modal-backdrop {
+    display: none !important;
+  }
+  .app-main,
+  .shell-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+  .shell {
+    display: block !important;
+  }
+  .sheets {
+    gap: 0;
+  }
+  .sheet {
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;
+  }
+  .sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .qr-label {
+    outline: 0;
+  }
+}
+
 /* ============ responsive ============ */
 @media (max-width: 860px) {
   .shell {

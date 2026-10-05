@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
   canDo,
@@ -84,6 +84,7 @@ function AssetDetail({
   const canEdit = !asset.archived && !!asset.spaceId && canDo(perms, 'ASSET_EDIT', asset.spaceId, spaces);
   // ASSET_DELETE is checked on the asset's space; an orphaned archived asset needs building-wide rights.
   const canArchive = canDo(perms, 'ASSET_DELETE', asset.spaceId ?? null, spaces);
+  const canReport = !!asset.spaceId && canDo(perms, 'ISSUE_REPORT', asset.spaceId, spaces);
 
   async function onArchive() {
     const ok = await confirm(
@@ -169,13 +170,16 @@ function AssetDetail({
         ) : (
           <Text style={{ color: colors.textMuted, fontSize: 15 }}>Describe any problem in your own words.</Text>
         )}
-        <Button
-          title="Report a problem"
-          disabled={asset.archived}
-          onPress={() => router.push(`/buildings/${asset.buildingId}/report?assetId=${asset.id}`)}
-          style={{ minHeight: 64 }}
-        />
+        {canReport ? (
+          <Button
+            title="Report a problem"
+            disabled={asset.archived}
+            onPress={() => router.push(`/buildings/${asset.buildingId}/report?assetId=${asset.id}`)}
+            style={{ minHeight: 64 }}
+          />
+        ) : null}
       </Card>
+      {!asset.archived ? <QrLink asset={asset} /> : null}
       {!asset.archived ? <OpenIssues buildingId={asset.buildingId} assetId={asset.id} /> : null}
 
       <FormError message={archive.error ? errorMessage(archive.error) : restore.error ? errorMessage(restore.error) : null} />
@@ -187,6 +191,52 @@ function AssetDetail({
         <Button title="Restore" variant="secondary" onPress={() => restore.mutate(asset.id)} loading={restore.isPending} />
       ) : null}
     </ScrollScreen>
+  );
+}
+
+/**
+ * The label link (what the printed QR encodes). No QR renderer without an extra package, so:
+ * share it (to print/send) and copy it (web clipboard; on phones the link text is selectable).
+ */
+function QrLink({ asset }: { asset: AssetDto }) {
+  const { colors } = useTheme();
+  const [copied, setCopied] = useState(false);
+  const canCopy = Platform.OS === 'web' && typeof navigator !== 'undefined' && !!navigator.clipboard;
+  return (
+    <>
+      <SectionTitle>QR label link</SectionTitle>
+      <Card>
+        <Text selectable style={{ color: colors.text, fontSize: 14 }}>
+          {asset.qrUrl}
+        </Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+          Scanning this link opens the report screen for this item. Print labels from the web app.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Button
+            title="Share link"
+            variant="secondary"
+            style={{ flex: 1, paddingHorizontal: spacing.sm }}
+            onPress={() =>
+              void Share.share({ message: `${asset.name}: report a problem — ${asset.qrUrl}`, url: asset.qrUrl }).catch(() => undefined)
+            }
+          />
+          {canCopy ? (
+            <Button
+              title={copied ? 'Copied ✓' : 'Copy link'}
+              variant="secondary"
+              style={{ flex: 1, paddingHorizontal: spacing.sm }}
+              onPress={() =>
+                void navigator.clipboard.writeText(asset.qrUrl).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                })
+              }
+            />
+          ) : null}
+        </View>
+      </Card>
+    </>
   );
 }
 

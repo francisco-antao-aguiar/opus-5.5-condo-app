@@ -5,13 +5,16 @@ import { ApiService } from '../core/api.service';
 import { describeError, ErrorText } from '../core/errors';
 import { ToastService } from '../core/toast.service';
 import { allowedSpaceIds, assetQuery, assetSpaceTargets, assetTypeIcon, spacesInTreeOrder } from '../shared/assets';
+import { ModalComponent } from '../shared/modal.component';
+import { idsToParam, selectionState, toggleAllVisible, toggleSelected } from '../shared/qr';
+import { QrPreviewComponent } from '../shared/qr-preview.component';
 import { AssetDialogComponent } from './asset-dialog.component';
 import { BuildingContext } from './building-context.service';
 import { BulkAssetsDialogComponent } from './bulk-assets-dialog.component';
 
 @Component({
   selector: 'app-assets-page',
-  imports: [RouterLink, AssetDialogComponent, BulkAssetsDialogComponent],
+  imports: [RouterLink, ModalComponent, QrPreviewComponent, AssetDialogComponent, BulkAssetsDialogComponent],
   templateUrl: './assets.page.html',
 })
 export class AssetsPage {
@@ -42,6 +45,12 @@ export class AssetsPage {
   // dialogs
   protected readonly editing = signal<AssetDto | 'new' | null>(null);
   protected readonly bulkOpen = signal(false);
+  protected readonly qrFor = signal<AssetDto | null>(null);
+
+  // label selection (kept across filter changes, so you can build a sheet from several searches)
+  protected readonly selected = signal<ReadonlySet<UUID>>(new Set());
+  protected readonly selectableIds = computed(() => this.assets().filter((a) => !a.archived).map((a) => a.id));
+  protected readonly selState = computed(() => selectionState(this.selected(), this.selectableIds()));
 
   protected readonly spaceOptions = computed(() => spacesInTreeOrder(this.ctx.spaces()));
   protected readonly createAllowed = computed(() => allowedSpaceIds(this.ctx.perms(), this.ctx.spaces(), 'ASSET_CREATE'));
@@ -135,6 +144,27 @@ export class AssetsPage {
     this.setSearch('');
     this.includeArchived.set(false);
     this.includeDescendants.set(true);
+  }
+
+  protected toggle(id: UUID): void {
+    this.selected.update((s) => toggleSelected(s, id));
+  }
+
+  protected toggleAll(): void {
+    this.selected.update((s) => toggleAllVisible(s, this.selectableIds()));
+  }
+
+  protected clearSelection(): void {
+    this.selected.set(new Set());
+  }
+
+  protected printLabels(): void {
+    const ids = [...this.selected()];
+    const param = idsToParam(ids);
+    void this.router.navigate(['/buildings', this.ctx.buildingId(), 'assets', 'labels'], {
+      queryParams: param ? { ids: param } : {},
+      state: { ids },
+    });
   }
 
   protected indent(depth: number): string {

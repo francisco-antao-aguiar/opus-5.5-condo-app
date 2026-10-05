@@ -20,6 +20,11 @@ export const queryKeys = {
   issueList: (id: UUID, view: string, status: string) => ['buildings', id, 'issues', 'list', view, status] as const,
   issue: (id: UUID, issueId: UUID) => ['buildings', id, 'issues', 'detail', issueId] as const,
   openIssuesOnAsset: (id: UUID, assetId: UUID) => ['buildings', id, 'issues', 'onAsset', assetId] as const,
+  /** In-app notifications (not building-scoped). */
+  notifications: ['notifications'] as const,
+  notificationList: ['notifications', 'list'] as const,
+  unreadCount: ['notifications', 'unread'] as const,
+  resolvedAsset: (assetId: UUID) => ['qr', assetId] as const,
   /** Public preview, keyed by normalized code. */
   invitationPreview: (code: string) => ['invitations', 'preview', code] as const,
 };

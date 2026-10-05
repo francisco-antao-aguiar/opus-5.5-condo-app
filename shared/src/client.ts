@@ -13,6 +13,10 @@ import type {
   IssueQuery,
   IssueSummaryDto,
   MergeIssueRequest,
+  NotificationDto,
+  RegisterPushTokenRequest,
+  ResolvedAsset,
+  UnreadCount,
   OtherTextGroup,
   Page,
   PromoteOtherTextRequest,
@@ -47,6 +51,22 @@ import type {
   UpdateMemberRequest,
   UpdateSpaceRequest,
 } from './types.js';
+
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/**
+ * Asset id from anything an asset QR code may contain: the web link (".../r/{id}"), the app link
+ * ("buildingapp://report/asset/{id}") or a bare id. Null if it isn't an asset code.
+ */
+export function parseAssetCode(scanned: string): string | null {
+  const text = scanned.trim();
+  const patterns = [/\/r\/([0-9a-f-]{36})(?:[/?#]|$)/i, /report\/asset\/([0-9a-f-]{36})(?:[/?#]|$)/i, /^([0-9a-f-]{36})$/i];
+  for (const p of patterns) {
+    const m = p.exec(text);
+    if (m && UUID_RE.test(m[1])) return m[1].toLowerCase();
+  }
+  return null;
+}
 
 /** "abcd-efgh " → "ABCDEFGH". Users may type codes in any case, with spaces or a dash. */
 export function normalizeInviteCode(input: string): string {
@@ -275,6 +295,23 @@ export function createApiClient(config: ApiClientConfig) {
         request<void>('DELETE', `${b(buildingId)}/assets/${assetId}`),
       restore: (buildingId: UUID, assetId: UUID) =>
         request<AssetDto>('POST', `${b(buildingId)}/assets/${assetId}/restore`),
+    },
+
+    qr: {
+      /** After scanning: which building/asset this is, and whether I may report on it. */
+      resolve: (assetId: UUID) => request<ResolvedAsset>('GET', `/assets/${encodeURIComponent(assetId)}/resolve`),
+    },
+
+    notifications: {
+      list: (query: { unreadOnly?: boolean; page?: number; size?: number } = {}) =>
+        request<Page<NotificationDto>>('GET', `/me/notifications${toQueryString(query)}`),
+      unreadCount: () => request<UnreadCount>('GET', '/me/notifications/unread-count'),
+      markRead: (id: UUID) => request<void>('POST', `/me/notifications/${id}/read`),
+      markAllRead: () => request<void>('POST', '/me/notifications/read-all'),
+      registerPushToken: (req: RegisterPushTokenRequest) => request<void>('POST', '/me/push-tokens', req),
+      /** Call on logout (before clearing tokens) so this device stops receiving pushes. */
+      unregisterPushToken: (token: string) =>
+        request<void>('DELETE', `/me/push-tokens?token=${encodeURIComponent(token)}`),
     },
 
     issues: {

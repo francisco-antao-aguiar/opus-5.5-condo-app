@@ -6,3 +6,5 @@ app:
     enabled: false
   storage:
     local-dir: ${java.io.tmpdir}/condo-test-uploads
+  notifications:
+    async: false

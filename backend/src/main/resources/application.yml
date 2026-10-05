@@ -59,6 +59,14 @@ app:
   issues:
     # Issues in REPORTED longer than this are highlighted on the dashboard.
     stuck-after: 48h
+  notifications:
+    # Deliver notifications on a background executor so requests never wait for push delivery.
+    async: true
+  push:
+    # Off by default: notifications are still stored in-app, pushes are only logged.
+    enabled: ${APP_PUSH_ENABLED:false}
+    expo-url: https://exp.host/--/api/v2/push/send
+    access-token: ${APP_PUSH_ACCESS_TOKEN:}
   memberships:
     # Flips ACTIVE memberships past their end date to EXPIRED. Access is already cut at check time.
     expiry-cron: "0 */15 * * * *"

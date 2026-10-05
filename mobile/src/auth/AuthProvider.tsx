@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LoginRequest, MeResponse, RegisterRequest } from '@condo/shared';
 import { api, setSessionExpiredHandler, tokenStore } from '../api/client';
 import { queryKeys } from '../api/queryKeys';
+import { unregisterPush } from '../notifications/push';
 
 type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
@@ -39,7 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (opts?: { sessionExpired?: boolean }) => {
+    // Stop this device's pushes first, while the access token still works. Skipped when the
+    // session already expired (the call would only 401 and re-trigger this handler).
+    if (!opts?.sessionExpired) await unregisterPush();
     await api.auth.logout();
     // Protected routes in the root layout redirect to (auth)/login once status flips.
     queryClient.clear();
@@ -47,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
-      void logout();
+      void logout({ sessionExpired: true });
     });
     return () => setSessionExpiredHandler(null);
   }, [logout]);
