@@ -64,6 +64,8 @@ Invite codes in the seed (open `http://localhost:4200/join/<code>` or `buildinga
 
 *Edifício Aurora* is deliberately irregular: a basement with garage, storage and boiler room; a ground floor with a lobby, a shop and one flat; floors with 4, 3, 3 and 2 units; a duplex spanning two floors; and roof, stairwell and elevator shaft hanging off the root.
 
+It also has 19 assets (lobby light, door, intercom and extinguisher, the elevator, garage gate and lights, the central boiler, a stairwell light on every floor…), including private ones in 2B and the duplex that only those units and the admins see. Its problem catalog adds a custom gate problem ("Remote doesn't work") and hides the built-in "Damaged fixture" for lights.
+
 ## Web
 
 ```bash
@@ -89,7 +91,7 @@ The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To 
 
 1. **Building tree, spaces, roles, governance, auth** ✅
 2. **Invitations and membership expiry** ✅
-3. Asset types, assets, problem catalogs
+3. **Asset types, assets, problem catalogs** ✅
 4. Issue reporting, duplicate detection / "me too", lifecycle and timeline
 5. QR codes, deep links, push notifications
 6. Design only: maintenance, announcements, booking, costs (see DESIGN.md)

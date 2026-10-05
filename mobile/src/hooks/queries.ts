@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   normalizeInviteCode,
+  type AssetDto,
+  type CreateAssetRequest,
   type CreateBuildingRequest,
   type CreateInvitationRequest,
   type CreateSpaceRequest,
   type MemberDto,
   type SpaceDto,
+  type UpdateAssetRequest,
   type UpdateMemberRequest,
   type UpdateSpaceRequest,
   type UUID,
@@ -81,7 +84,12 @@ export function useCreateBuilding() {
 
 function useInvalidateSpaces(buildingId: UUID) {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: queryKeys.spaces(buildingId) });
+  // Assets carry their space's name/path/visibility, so structure changes refresh them too.
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: queryKeys.spaces(buildingId) }),
+      qc.invalidateQueries({ queryKey: queryKeys.assets(buildingId) }),
+    ]);
 }
 
 export function useCreateSpace(buildingId: UUID) {
@@ -206,4 +214,91 @@ export function useAcceptInvitation() {
       void qc.invalidateQueries({ queryKey: queryKeys.buildings, exact: true });
     },
   });
+}
+
+// ---------- assets & catalog ----------
+
+/**
+ * All active assets of the building that I may see, fetched once and grouped by space on the client.
+ * One request serves every level of the drill-down (instant navigation, works from cache offline),
+ * and buildings have at most a few hundred assets. Archived assets are excluded by the server default.
+ */
+export function useAssets(buildingId: UUID) {
+  return useQuery({ queryKey: queryKeys.assets(buildingId), queryFn: () => api.assets.list(buildingId) });
+}
+
+export function useAsset(buildingId: UUID, assetId: UUID) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: queryKeys.asset(buildingId, assetId),
+    queryFn: () => api.assets.get(buildingId, assetId),
+    // Instant render when coming from the browser; the fetch still refreshes it.
+    placeholderData: () =>
+      qc.getQueryData<AssetDto[]>(queryKeys.assets(buildingId))?.find((a) => a.id === assetId),
+  });
+}
+
+/** Asset types with this building's active problem types. Reference-ish data. */
+export function useCatalog(buildingId: UUID) {
+  return useQuery({
+    queryKey: queryKeys.catalog(buildingId),
+    queryFn: () => api.catalog.get(buildingId),
+    staleTime: 10 * 60_000,
+  });
+}
+
+function useInvalidateAssets(buildingId: UUID) {
+  const qc = useQueryClient();
+  // Prefix covers the list and every detail; spaces carry assetCount.
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: queryKeys.assets(buildingId) }),
+      qc.invalidateQueries({ queryKey: queryKeys.spaces(buildingId) }),
+    ]);
+}
+
+export function useCreateAsset(buildingId: UUID) {
+  const invalidate = useInvalidateAssets(buildingId);
+  return useMutation({
+    mutationFn: (req: CreateAssetRequest) => api.assets.create(buildingId, req),
+    onSettled: invalidate,
+  });
+}
+
+/** Always refetches afterwards, so a 409 CONFLICT is followed by the latest version. */
+export function useUpdateAsset(buildingId: UUID) {
+  const invalidate = useInvalidateAssets(buildingId);
+  return useMutation({
+    mutationFn: ({ assetId, req }: { assetId: UUID; req: UpdateAssetRequest }) =>
+      api.assets.update(buildingId, assetId, req),
+    onSettled: invalidate,
+  });
+}
+
+export function useArchiveAsset(buildingId: UUID) {
+  const invalidate = useInvalidateAssets(buildingId);
+  return useMutation({
+    mutationFn: (assetId: UUID) => api.assets.archive(buildingId, assetId),
+    onSettled: invalidate,
+  });
+}
+
+export function useRestoreAsset(buildingId: UUID) {
+  const invalidate = useInvalidateAssets(buildingId);
+  return useMutation({
+    mutationFn: (assetId: UUID) => api.assets.restore(buildingId, assetId),
+    onSettled: invalidate,
+  });
+}
+
+/** Full-replace body for PUT /assets/{id}, starting from the current asset; carries its version. */
+export function toAssetUpdate(asset: AssetDto, patch: Partial<UpdateAssetRequest>): UpdateAssetRequest {
+  return {
+    spaceId: asset.spaceId ?? '',
+    type: asset.type,
+    name: asset.name,
+    notes: asset.notes,
+    version: asset.version,
+    ...patch,
+  };
 }

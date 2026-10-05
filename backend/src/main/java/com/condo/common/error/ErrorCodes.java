@@ -31,6 +31,11 @@ public final class ErrorCodes {
     public static final String INVITATION_INVALID = "INVITATION_INVALID";
     public static final String ALREADY_MEMBER = "ALREADY_MEMBER";
     public static final String TOO_MANY_ATTEMPTS = "TOO_MANY_ATTEMPTS";
+    public static final String UNKNOWN_ASSET_TYPE = "UNKNOWN_ASSET_TYPE";
+    public static final String SPACE_HAS_ASSETS = "SPACE_HAS_ASSETS";
+    public static final String ASSET_ARCHIVED = "ASSET_ARCHIVED";
+    public static final String BUILT_IN_PROBLEM_TYPE = "BUILT_IN_PROBLEM_TYPE";
+    public static final String DUPLICATE_PROBLEM_TYPE = "DUPLICATE_PROBLEM_TYPE";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
 
     private ErrorCodes() {

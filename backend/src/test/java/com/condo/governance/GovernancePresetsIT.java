@@ -86,8 +86,9 @@ class GovernancePresetsIT {
                 insert into permission_policy (governance_mode, action, role_code, scope)
                 select 'DEVICES_OPEN', action, role_code, scope from permission_policy where governance_mode = 'MANAGED'
                 """);
+        // MANAGED already lets owners add assets in their own unit; this mode lets tenants add them anywhere.
         jdbc.update("insert into permission_policy (governance_mode, action, role_code, scope) values "
-                + "('DEVICES_OPEN', 'ASSET_CREATE', 'TENANT', 'ANY'), ('DEVICES_OPEN', 'ASSET_CREATE', 'OWNER', 'ANY')");
+                + "('DEVICES_OPEN', 'ASSET_CREATE', 'TENANT', 'ANY')");
         building.update(building.getName(), null, "DEVICES_OPEN");
 
         assertThat(can(Role.TENANT, Action.ASSET_CREATE, unitB)).isTrue();

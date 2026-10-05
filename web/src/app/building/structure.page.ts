@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import {
   CreateSpaceRequest,
   SPACE_TYPE_LABELS,
@@ -46,7 +47,7 @@ function defaultChildType(parent: SpaceType): ChildType {
 
 @Component({
   selector: 'app-structure-page',
-  imports: [ReactiveFormsModule, ModalComponent, StructureWizardComponent],
+  imports: [ReactiveFormsModule, RouterLink, ModalComponent, StructureWizardComponent],
   templateUrl: './structure.page.html',
 })
 export class StructurePage {
@@ -71,6 +72,9 @@ export class StructurePage {
 
   protected readonly moving = signal<SpaceDto | null>(null);
   protected readonly moveFilter = signal('');
+
+  /** Set after a delete was refused with SPACE_HAS_ASSETS. */
+  protected readonly blockedDelete = signal<{ id: UUID; name: string } | null>(null);
 
   protected readonly wizardOpen = signal(false);
   protected readonly wizardConflict = signal(false);
@@ -181,7 +185,7 @@ export class StructurePage {
   }
 
   /** Runs a mutation, reports errors, then refreshes the flat space list. */
-  private async mutate(fn: () => Promise<unknown>, success?: string): Promise<boolean> {
+  private async mutate(fn: () => Promise<unknown>, success?: string, onError?: (e: unknown) => boolean): Promise<boolean> {
     if (this.busy()) return false;
     this.busy.set(true);
     try {
@@ -190,6 +194,7 @@ export class StructurePage {
       return true;
     } catch (e) {
       // The finally block refetches, so a conflict leaves the user looking at the latest data.
+      if (onError?.(e)) return false;
       if (isConflict(e)) this.toast.info(CONFLICT_RELOADED);
       else this.toast.error(e);
       return false;
@@ -260,6 +265,7 @@ export class StructurePage {
         : { title: `Delete “${node.name}”?`, message: 'This cannot be undone.', confirmText: 'Delete', danger: true },
     );
     if (!ok) return;
+    this.blockedDelete.set(null);
     const deleted = await this.mutate(async () => {
       try {
         await this.api.client.spaces.remove(this.bid, node.id, descendants > 0);
@@ -274,7 +280,11 @@ export class StructurePage {
         });
         if (cascade) await this.api.client.spaces.remove(this.bid, node.id, true);
       }
-    }, `Deleted “${node.name}”`);
+    }, `Deleted “${node.name}”`, (e) => {
+      if (errorCode(e) !== 'SPACE_HAS_ASSETS') return false;
+      this.blockedDelete.set({ id: node.id, name: node.name });
+      return true;
+    });
     if (deleted) this.openId.set(null);
   }
 

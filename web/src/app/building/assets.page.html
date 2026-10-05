@@ -1,0 +1,148 @@
+<div class="page-head">
+  <h1>Assets</h1>
+  @if (canCreate()) {
+    <div class="row gap wrap">
+      <button type="button" class="btn" [disabled]="!catalog().length" (click)="bulkOpen.set(true)">Add to several spaces…</button>
+      <button type="button" class="btn btn-primary" [disabled]="!catalog().length" (click)="editing.set('new')">＋ Add asset</button>
+    </div>
+  }
+</div>
+
+<p class="muted small">Lights, doors, the elevator, the boiler… Residents report problems on these. Private assets are only shown to people with access to that space.</p>
+
+<div class="toolbar asset-filters">
+  <label class="filter">
+    <span class="sr-only">Space</span>
+    <select [value]="spaceId()" (change)="setSpace($any($event.target).value)" aria-label="Filter by space">
+      <option value="" [selected]="!spaceId()">All spaces</option>
+      @for (o of spaceOptions(); track o.space.id) {
+        <option [value]="o.space.id" [selected]="o.space.id === spaceId()">{{ indent(o.depth) }}{{ o.space.name }}</option>
+      }
+    </select>
+  </label>
+  @if (spaceId()) {
+    <label class="check small">
+      <input type="checkbox" [checked]="includeDescendants()" (change)="includeDescendants.set($any($event.target).checked)" />
+      <span>Include sub-spaces</span>
+    </label>
+  }
+  <label class="filter">
+    <span class="sr-only">Type</span>
+    <select [value]="type()" (change)="type.set($any($event.target).value)" aria-label="Filter by type">
+      <option value="" [selected]="!type()">All types</option>
+      @for (t of catalog(); track t.code) {
+        <option [value]="t.code" [selected]="t.code === type()">{{ icon(t.icon) }} {{ t.name }}</option>
+      }
+    </select>
+  </label>
+  <input type="search" class="grow" placeholder="Search by name…" aria-label="Search assets by name" [value]="search()" (input)="setSearch($any($event.target).value)" />
+  <label class="check small">
+    <input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" />
+    <span>Show archived</span>
+  </label>
+</div>
+
+@if (loadError(); as e) {
+  <div class="alert alert-error" role="alert">
+    <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+    <button type="button" class="btn btn-sm" (click)="reload()">Retry</button>
+  </div>
+} @else if (loading() && !assets().length) {
+  <p class="muted">Loading assets…</p>
+} @else {
+  <div class="table-wrap" [class.busy]="loading()">
+    <table class="table members-table assets-table">
+      <thead>
+        <tr>
+          <th>Asset</th>
+          <th>Location</th>
+          <th>Visibility</th>
+          <th>Notes</th>
+          <th><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (a of assets(); track a.id) {
+          <tr [class.inactive]="a.archived">
+            <td data-label="Asset">
+              <span class="asset-name">
+                <span class="asset-icon" [title]="a.typeName" aria-hidden="true">{{ icon(typeByCode().get(a.type)?.icon) }}</span>
+                <span>
+                  <strong>{{ a.name }}</strong>
+                  <span class="muted small block-sm">{{ a.typeName }}</span>
+                </span>
+              </span>
+              @if (a.archived) {
+                <span class="badge badge-warn">Archived</span>
+              }
+            </td>
+            <td data-label="Location">
+              @if (a.spaceId) {
+                {{ a.spacePath || a.spaceName || ctx.building()?.name }}
+              } @else {
+                <span class="muted">Space deleted</span>
+              }
+            </td>
+            <td data-label="Visibility">
+              @if (a.effectiveVisibility) {
+                <span class="badge" [class.badge-common]="a.effectiveVisibility === 'COMMON'" [class.badge-private]="a.effectiveVisibility === 'PRIVATE'">
+                  {{ a.effectiveVisibility === 'COMMON' ? 'Common' : 'Private' }}
+                </span>
+              }
+            </td>
+            <td data-label="Notes" class="asset-notes">{{ a.notes ?? '' }}</td>
+            <td class="cell-actions">
+              @if (a.archived) {
+                @if (canArchive(a)) {
+                  <button type="button" class="btn btn-sm" [disabled]="!a.spaceId" [title]="a.spaceId ? '' : 'Its space was deleted'" (click)="restore(a)">Restore</button>
+                }
+              } @else if (canEdit(a)) {
+                <button type="button" class="btn btn-sm" (click)="editing.set(a)">Edit</button>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5" class="muted">
+              @if (filtered()) {
+                No assets match these filters.
+                <button type="button" class="btn btn-sm" (click)="clearFilters()">Clear filters</button>
+              } @else {
+                No assets yet.
+                @if (canCreate()) {
+                  Add the lights, doors and other equipment residents may need to report problems on.
+                }
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">{{ assets().length }} asset{{ assets().length === 1 ? '' : 's' }}@if (filterSpaceName()) { in {{ filterSpaceName() }}{{ includeDescendants() ? ' and below' : '' }}}</p>
+}
+
+@if (editing(); as e) {
+  <app-asset-dialog
+    [buildingId]="ctx.buildingId()!"
+    [catalog]="catalog()"
+    [spaces]="spaceOptions()"
+    [allowed]="editAllowed()"
+    [asset]="e === 'new' ? null : e"
+    [initialSpaceId]="spaceId() || null"
+    [canArchive]="e !== 'new' && canArchive(e)"
+    (changed)="reload()"
+    (closed)="editing.set(null)"
+  />
+}
+
+@if (bulkOpen()) {
+  <app-bulk-assets-dialog
+    [buildingId]="ctx.buildingId()!"
+    [catalog]="catalog()"
+    [spaces]="spaceOptions()"
+    [allowed]="createAllowed()"
+    (created)="reload()"
+    (closed)="bulkOpen.set(false)"
+  />
+}

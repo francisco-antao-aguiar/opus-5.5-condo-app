@@ -30,12 +30,13 @@ src/app/
   core/       api.service (shared client + token store), auth.service (me() signal), auth.guard,
               errors (ApiError → friendly text, field errors → form controls), toast & confirm services
   shared/     structure wizard (component + pure logic), space-utils (move targets, reorder, tree flattening),
-              policy matrix, invitations (who may invite where, form → request, summaries, join messages),
+              policy matrix, assets (icons, allowed spaces, bulk shortcuts, catalog requests), invitations (who may invite where, form → request, summaries, join messages),
               clipboard, modal, field-error
   pages/      login, register (both honour ?returnUrl), buildings (list + create + "join with a code"),
               join (/join/:code — public invitation preview + accept)
   building/   shell + BuildingContext (building, my permissions, spaces as signals) and the
-              structure / members (+ invite dialog, invitations list) / settings child pages
+              structure / assets (+ asset and bulk-add dialogs) / members (+ invite dialog, invitations list) /
+              problem catalog / settings child pages
 ```
 
 Permission checks in the UI use `canDo()` from `@condo/shared` and only hide controls. The server always re-checks.
@@ -57,3 +58,18 @@ Permission checks in the UI use `canDo()` from `@condo/shared` and only hide con
 
 `angular.json` keeps `@condo/shared` out of Vite's dev pre-bundling. Otherwise `ng serve` keeps serving a stale copy of the
 shared client after `shared/dist` is rebuilt (the error is "does not provide an export named …").
+
+## Assets and problem catalog (phase 3)
+
+* **Assets** (`/buildings/:id/assets?space=<id>`) — every member can open it. The server hides private assets you can't
+  see. You can filter by space (sub-spaces included by default), type and name, and choose to show archived assets.
+  * **Add asset** offers only the spaces where you have `ASSET_CREATE`. **Edit** needs `ASSET_EDIT` on the current space
+    and on the new one.
+  * Picking a type pre-fills the name and shows what residents will be able to report for that type.
+  * **Add to several spaces** creates the same asset in many spaces in one `bulkCreate` call. Shortcuts select all
+    floors, all units or all common areas.
+  * Assets are archived, never deleted (QR labels and history survive) and can be restored.
+* **Structure** — nodes show a 💡 *n* chip linking to their assets. Deleting a space that still has active assets
+  explains why it can't be deleted and links to those assets.
+* **Problem catalog** (`/buildings/:id/catalog`, nav entry for `CATALOG_EDIT`) — built-in problems can be hidden or
+  shown. Custom ones can be added, renamed, reordered and turned off or on.

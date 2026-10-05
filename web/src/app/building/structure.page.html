@@ -19,6 +19,17 @@
   <span class="muted small">{{ ctx.spaces().length }} spaces</span>
 </div>
 
+@if (blockedDelete(); as b) {
+  <div class="alert alert-warn" role="alert">
+    <strong>“{{ b.name }}” can't be deleted: it still has active assets (in it or in a space below it).</strong>
+    <p>Archive them or move them to another space first. Archived assets don't block deletion and keep their history.</p>
+    <div class="row gap wrap">
+      <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'assets']" [queryParams]="{ space: b.id }">Show its assets</a>
+      <button type="button" class="btn btn-sm" (click)="blockedDelete.set(null)">Dismiss</button>
+    </div>
+  </div>
+}
+
 @if (!canEditAny()) {
   <p class="muted small">You can view this building's structure. Editing requires the "Edit structure" permission.</p>
 }
@@ -57,6 +68,15 @@
       >
         {{ node.effectiveVisibility === 'COMMON' ? 'Common' : 'Private' }}@if (node.visibility === null) {<em> · inherited</em>}
       </span>
+      @if (node.assetCount > 0) {
+        <a
+          class="asset-chip"
+          [routerLink]="['/buildings', ctx.buildingId(), 'assets']"
+          [queryParams]="{ space: node.id }"
+          [title]="node.assetCount + ' asset' + (node.assetCount === 1 ? '' : 's') + ' here — show them'"
+          ><span aria-hidden="true">💡</span> {{ node.assetCount }}<span class="sr-only"> assets</span></a
+        >
+      }
       @if (canEdit) {
         <button
           type="button"

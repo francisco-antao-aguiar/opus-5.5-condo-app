@@ -39,6 +39,16 @@ export const routes: Routes = [
         loadComponent: () => import('./building/structure.page').then((m) => m.StructurePage),
       },
       {
+        path: 'assets',
+        title: 'Assets · Condo',
+        loadComponent: () => import('./building/assets.page').then((m) => m.AssetsPage),
+      },
+      {
+        path: 'catalog',
+        title: 'Problem catalog · Condo',
+        loadComponent: () => import('./building/catalog.page').then((m) => m.CatalogPage),
+      },
+      {
         path: 'members',
         title: 'Members · Condo',
         loadComponent: () => import('./building/members.page').then((m) => m.MembersPage),

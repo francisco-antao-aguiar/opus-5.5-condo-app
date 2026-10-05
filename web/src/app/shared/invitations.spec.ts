@@ -22,7 +22,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-10-05T10:00:00Z');
 
 function space(id: string, parentId: string | null, type: SpaceDto['type'], name: string): SpaceDto {
-  return { id, buildingId: 'b', parentId, type, name, sortOrder: 0, visibility: null, effectiveVisibility: 'COMMON', depth: 0, version: 0 };
+  return { id, buildingId: 'b', parentId, type, name, sortOrder: 0, visibility: null, effectiveVisibility: 'COMMON', depth: 0, version: 0, assetCount: 0 };
 }
 
 const spaces: SpaceDto[] = [
