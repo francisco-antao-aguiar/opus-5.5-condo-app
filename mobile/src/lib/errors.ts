@@ -46,9 +46,31 @@ export function describeError(error: unknown): ErrorInfo {
   };
 }
 
+/** Friendly copy for codes the UI handles specially; anything else uses the server's detail. */
+const FRIENDLY: Partial<Record<string, string>> = {
+  CONFLICT: 'Someone else changed this — showing the latest.',
+  LAST_ADMIN: 'A building needs at least one admin. Make someone else admin first.',
+  ROLE_RANK_EXCEEDED: "You can't give someone a role above your own.",
+  INVITATION_NOT_FOUND: "We couldn't find that invitation. Check the code and try again.",
+  INVITATION_INVALID: 'This invitation no longer works: whoever sent it can no longer invite people here.',
+  INVITATION_EXPIRED: 'This invitation has expired. Ask for a new one.',
+  INVITATION_REVOKED: 'This invitation was cancelled by the person who sent it.',
+  INVITATION_EXHAUSTED: 'This invitation has already been used.',
+  ALREADY_MEMBER: "You're already a member of this building.",
+  TOO_MANY_ATTEMPTS: 'Too many attempts. Wait a few minutes and try again.',
+};
+
+/** 409 from an update that carried a stale `version`. */
+export function isConflict(error: unknown): boolean {
+  // Only the code: other 409s (EMAIL_TAKEN, ALREADY_MEMBER…) are not version conflicts.
+  return error instanceof ApiError && error.problem.code === 'CONFLICT';
+}
+
 /** One-line message for inline form errors. */
 export function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.problem.detail ?? error.problem.title;
+  if (error instanceof ApiError) {
+    return FRIENDLY[error.problem.code] ?? error.problem.detail ?? error.problem.title;
+  }
   return describeError(error).message;
 }
 

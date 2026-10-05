@@ -59,14 +59,15 @@ public class Space extends BaseEntity {
 
     public static Space childOf(Space parent, SpaceType type, String name, int sortOrder, Visibility visibility) {
         Space s = new Space();
-        s.buildingId = parent.buildingId;
+        // Getters, not fields: parent may be a lazy Hibernate proxy whose fields are unset.
+        s.buildingId = parent.getBuildingId();
         s.parentId = parent.getId();
         s.type = type;
         s.name = name;
         s.sortOrder = sortOrder;
         s.visibility = visibility;
-        s.path = parent.path + s.getId() + "/";
-        s.depth = parent.depth + 1;
+        s.path = parent.getPath() + s.getId() + "/";
+        s.depth = parent.getDepth() + 1;
         return s;
     }
 
@@ -74,16 +75,16 @@ public class Space extends BaseEntity {
         return parentId == null;
     }
 
-    /** True if this node is {@code other} or one of its descendants. */
+    /** True if this node is {@code other} or one of its descendants. ({@code other} may be a lazy proxy.) */
     public boolean isWithin(Space other) {
-        return buildingId.equals(other.buildingId) && path.startsWith(other.path);
+        return buildingId.equals(other.getBuildingId()) && path.startsWith(other.getPath());
     }
 
     /** Re-parents this node; the caller must rebase descendants' paths. */
     void reparent(Space newParent) {
         this.parentId = newParent.getId();
-        this.path = newParent.path + getId() + "/";
-        this.depth = newParent.depth + 1;
+        this.path = newParent.getPath() + getId() + "/";
+        this.depth = newParent.getDepth() + 1;
     }
 
     public void update(String name, SpaceType type, Visibility visibility, int sortOrder) {

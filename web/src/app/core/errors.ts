@@ -17,7 +17,22 @@ const FRIENDLY: Record<string, string> = {
   EMAIL_TAKEN: 'An account with this email already exists.',
   INVALID_CREDENTIALS: 'Wrong email or password.',
   CONFLICT: 'Someone else changed this in the meantime. Reload and try again.',
+  INVITATION_NOT_FOUND: "We couldn't find that invitation code.",
+  INVITATION_EXPIRED: 'This invitation has expired.',
+  INVITATION_REVOKED: 'This invitation was revoked.',
+  INVITATION_EXHAUSTED: 'This invitation was already used.',
+  INVITATION_INVALID: 'This invitation is no longer valid. Ask for a new one.',
+  ALREADY_MEMBER: "You're already a member of this building.",
+  TOO_MANY_ATTEMPTS: 'Too many attempts. Please wait a few minutes.',
+  INVALID_UNIT: 'Pick a unit (a space of type Unit).',
 };
+
+/** Shown after a 409 CONFLICT, once the page has refetched the latest data. */
+export const CONFLICT_RELOADED = 'Someone else changed this — reloaded the latest version';
+
+export function isConflict(e: unknown): boolean {
+  return errorCode(e) === 'CONFLICT';
+}
 
 export function problemOf(e: unknown): ApiProblem | null {
   return e instanceof ApiError ? e.problem : null;

@@ -24,6 +24,13 @@ public final class ErrorCodes {
     public static final String LAST_ADMIN = "LAST_ADMIN";
     public static final String ROLE_RANK_EXCEEDED = "ROLE_RANK_EXCEEDED";
     public static final String CONFLICT = "CONFLICT";
+    public static final String INVITATION_NOT_FOUND = "INVITATION_NOT_FOUND";
+    public static final String INVITATION_EXPIRED = "INVITATION_EXPIRED";
+    public static final String INVITATION_REVOKED = "INVITATION_REVOKED";
+    public static final String INVITATION_EXHAUSTED = "INVITATION_EXHAUSTED";
+    public static final String INVITATION_INVALID = "INVITATION_INVALID";
+    public static final String ALREADY_MEMBER = "ALREADY_MEMBER";
+    public static final String TOO_MANY_ATTEMPTS = "TOO_MANY_ATTEMPTS";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
 
     private ErrorCodes() {

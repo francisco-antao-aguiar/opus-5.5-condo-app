@@ -49,7 +49,10 @@ src/app/                       routes (Expo Router)
   (app)/buildings/new          create building + quick setup
   (app)/buildings/[buildingId]/index            building home (root of space browser)
   (app)/buildings/[buildingId]/spaces/[spaceId] one level of the drill-down browser
-  (app)/buildings/[buildingId]/members          read-only members
+  (app)/buildings/[buildingId]/members          members (end date / revoke / restore) + invitations
+  (app)/buildings/[buildingId]/invite           create an invitation, then share its code
+  join/index                   "Join with a code" (outside the auth guards: works signed in or out)
+  join/[code]                  invitation landing: preview, then accept / sign in / create account
 src/api/                       shared client, token store (secure-store / localStorage on web), query client, query keys
 src/auth/                      AuthProvider (tokens, me, login/register/logout, session expiry)
 src/components/                UI kit, state views, space browser + edit sheets
@@ -58,3 +61,25 @@ src/theme/                     colors (light/dark), spacing, tap-target sizes
 ```
 
 Deep links use the `buildingapp://` scheme, e.g. `buildingapp://buildings/{id}/spaces/{spaceId}`.
+
+## Invitations
+
+`buildingapp://join/{code}` (and the web path `/join/{code}`) opens the join screen, which works signed
+out. Codes are accepted in any case, with or without the dash. If a signed-out user taps *Sign in* or
+*Create account*, the code is remembered (AsyncStorage, 24 h) and they land back on the join screen after
+authenticating. Manual entry: Buildings tab → **Join**, or "I have an invite code" on the login screen.
+
+Testing the deep link on an emulator / dev build:
+
+```bash
+npx uri-scheme open buildingapp://join/ABCDEFGH --android
+# or
+adb shell am start -W -a android.intent.action.VIEW -d "buildingapp://join/ABCDEFGH"
+# iOS simulator
+npx uri-scheme open buildingapp://join/ABCDEFGH --ios
+```
+
+In Expo Go, use `exp://<lan-ip>:8081/--/join/ABCDEFGH` instead. On web, open `http://localhost:8081/join/ABCDEFGH`.
+
+Updates send the entity's `version`. A `409 CONFLICT` shows "Someone else changed this — showing the latest"
+and the data is refetched.

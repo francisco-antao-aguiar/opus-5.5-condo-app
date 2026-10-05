@@ -2,6 +2,7 @@ package com.condo.space;
 
 import com.condo.common.error.ApiException;
 import com.condo.common.error.ErrorCodes;
+import com.condo.common.persistence.Versions;
 import com.condo.governance.AccessGuard;
 import com.condo.governance.Action;
 import com.condo.space.dto.SpaceDtos.CreateSpaceRequest;
@@ -68,6 +69,7 @@ public class SpaceService {
     public SpaceDto update(UUID buildingId, UUID spaceId, UpdateSpaceRequest req) {
         Space node = find(buildingId, spaceId);
         guard.require(buildingId, Action.STRUCTURE_EDIT, node);
+        Versions.requireCurrent(req.version(), node);
         if (node.isRoot()) {
             if (req.type() != SpaceType.BUILDING || req.visibility() == null) {
                 throw ApiException.badRequest(ErrorCodes.INVALID_HIERARCHY,
@@ -77,6 +79,7 @@ public class SpaceService {
             throw ApiException.badRequest(ErrorCodes.INVALID_HIERARCHY, "Only the root can be of type BUILDING.");
         }
         node.update(req.name().trim(), req.type(), req.visibility(), req.sortOrder());
+        spaces.flush(); // bump @Version before mapping, so the client gets the new one
         return toDto(node);
     }
 
@@ -178,7 +181,8 @@ public class SpaceService {
         nodes.forEach(n -> byId.put(n.getId(), n));
         return nodes.stream()
                 .map(s -> new SpaceDto(s.getId(), s.getBuildingId(), s.getParentId(), s.getType(), s.getName(),
-                        s.getSortOrder(), s.getVisibility(), effectiveVisibility(s, byId), s.getDepth()))
+                        s.getSortOrder(), s.getVisibility(), effectiveVisibility(s, byId), s.getDepth(),
+                        s.getVersion() != null ? s.getVersion() : 0L))
                 .toList();
     }
 

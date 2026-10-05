@@ -52,6 +52,13 @@ export type ErrorCode =
   | 'LAST_ADMIN'
   | 'ROLE_RANK_EXCEEDED'
   | 'CONFLICT'
+  | 'INVITATION_NOT_FOUND'
+  | 'INVITATION_EXPIRED'
+  | 'INVITATION_REVOKED'
+  | 'INVITATION_EXHAUSTED'
+  | 'INVITATION_INVALID'
+  | 'ALREADY_MEMBER'
+  | 'TOO_MANY_ATTEMPTS'
   | 'INTERNAL_ERROR'
   | (string & {});
 
@@ -111,6 +118,7 @@ export interface MembershipSummary {
   expiresAt: Instant | null;
 }
 
+/** `memberships` lists only memberships that currently grant access (not revoked, not expired). */
 export interface MeResponse {
   user: UserDto;
   memberships: MembershipSummary[];
@@ -160,6 +168,8 @@ export interface BuildingDto {
   governanceMode: GovernanceModeCode;
   rootSpaceId: UUID;
   createdAt: Instant;
+  /** Optimistic-locking version; send it back on update to detect concurrent edits. */
+  version: number;
 }
 
 export type CommonAreaKind = 'LOBBY' | 'GARAGE' | 'ROOF' | 'ELEVATOR_SHAFT' | 'STAIRWELL' | 'STORAGE';
@@ -198,6 +208,8 @@ export interface UpdateBuildingRequest {
   name: string;
   address: string | null;
   governanceMode: GovernanceModeCode;
+  /** If given and stale, the server answers 409 CONFLICT instead of overwriting. */
+  version?: number;
 }
 
 // ---------- spaces ----------
@@ -214,6 +226,7 @@ export interface SpaceDto {
   /** Visibility after inheritance. */
   effectiveVisibility: Visibility;
   depth: number;
+  version: number;
 }
 
 export interface CreateSpaceRequest {
@@ -231,6 +244,8 @@ export interface UpdateSpaceRequest {
   type: SpaceType;
   visibility: Visibility | null;
   sortOrder: number;
+  /** If given and stale, the server answers 409 CONFLICT instead of overwriting. */
+  version?: number;
 }
 
 export interface MoveSpaceRequest {
@@ -252,11 +267,91 @@ export interface MemberDto {
   status: MembershipStatus;
   expiresAt: Instant | null;
   createdAt: Instant;
+  /** Who issued the invitation this member joined with, if any. */
+  invitedByName: string | null;
+  version: number;
 }
 
-/** Full replace. */
+/**
+ * Full replace. On an EXPIRED member, a future expiresAt — or null for "no end date" — restores access.
+ */
 export interface UpdateMemberRequest {
   role: RoleCode;
   unitId: UUID | null;
   expiresAt: Instant | null;
+  /** If given and stale, the server answers 409 CONFLICT instead of overwriting. */
+  version?: number;
+}
+
+// ---------- invitations ----------
+
+/**
+ * INVALID: still within its dates and uses, but whoever issued it can no longer invite (e.g. the owner left).
+ * Accepting a non-ACTIVE invitation fails with the matching INVITATION_* error code (410).
+ */
+export type InvitationStatus = 'ACTIVE' | 'EXHAUSTED' | 'EXPIRED' | 'REVOKED' | 'INVALID';
+
+export interface InvitationDto {
+  id: UUID;
+  buildingId: UUID;
+  /** 8 characters, no ambiguous letters/digits. Display with formatInviteCode(). */
+  code: string;
+  role: RoleCode;
+  unitId: UUID | null;
+  unitName: string | null;
+  maxUses: number;
+  useCount: number;
+  /** When the invitation itself stops working. */
+  expiresAt: Instant;
+  /** Fixed end date of the membership created by accepting. */
+  membershipExpiresAt: Instant | null;
+  /** Or: membership lasts this many days counted from acceptance. At most one of the two is set; neither = no end. */
+  membershipDurationDays: number | null;
+  note: string | null;
+  status: InvitationStatus;
+  createdByName: string;
+  createdAt: Instant;
+  /** Web fallback link, e.g. http://localhost:4200/join/ABCDEFGH */
+  joinUrl: string;
+  /** App deep link, e.g. buildingapp://join/ABCDEFGH */
+  deepLink: string;
+}
+
+/** 400 VALIDATION_FAILED field names match these property names. */
+export interface CreateInvitationRequest {
+  role: RoleCode;
+  /** Required when the inviter may only invite into their own unit (owners). */
+  unitId?: UUID | null;
+  /** 1 = single use (default), up to 500. */
+  maxUses?: number;
+  /** Default: 7 days from now; at most 90 days. */
+  expiresAt?: Instant | null;
+  /** Fixed membership end date for whoever accepts (e.g. end of lease). */
+  membershipExpiresAt?: Instant | null;
+  /** Or: membership lasts N days (1..3650) from acceptance, e.g. 7 for a guest. Not both. */
+  membershipDurationDays?: number | null;
+  note?: string | null;
+}
+
+/**
+ * Public: what an invite code leads to, shown before sign-in/registration.
+ * Unknown codes → 404 INVITATION_NOT_FOUND; known but unusable codes → 200 with a non-ACTIVE status.
+ */
+export interface InvitationPreview {
+  code: string;
+  buildingId: UUID;
+  buildingName: string;
+  buildingAddress: string | null;
+  role: RoleCode;
+  unitName: string | null;
+  invitedByName: string;
+  status: InvitationStatus;
+  expiresAt: Instant;
+  membershipExpiresAt: Instant | null;
+  membershipDurationDays: number | null;
+}
+
+export interface AcceptInvitationResponse {
+  buildingId: UUID;
+  membership: MembershipSummary;
 }

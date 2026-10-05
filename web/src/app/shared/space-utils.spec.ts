@@ -13,6 +13,7 @@ function space(id: string, parentId: string | null, type: SpaceType, name = id, 
     visibility: null,
     effectiveVisibility: 'COMMON',
     depth: 0,
+    version: 0,
   };
 }
 

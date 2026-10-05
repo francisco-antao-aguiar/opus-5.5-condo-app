@@ -1,10 +1,14 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, OnInit, signal, viewChild } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { BuildingDto, GovernanceModeDto } from '@condo/shared';
+import { map } from 'rxjs';
 import { ApiService } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
 import { applyServerErrors, describeError, ErrorText } from '../core/errors';
+import { extractInviteCode } from '../shared/invitations';
 import { ToastService } from '../core/toast.service';
 import { FieldErrorComponent } from '../shared/field-error.component';
 import { StructureWizardComponent } from '../shared/structure-wizard.component';
@@ -20,14 +24,49 @@ interface BuildingCard {
 
 @Component({
   selector: 'app-buildings-page',
-  imports: [ReactiveFormsModule, RouterLink, FieldErrorComponent, StructureWizardComponent],
+  imports: [ReactiveFormsModule, RouterLink, NgTemplateOutlet, FieldErrorComponent, StructureWizardComponent],
   template: `
+    <ng-template #joinForm let-big>
+      <form class="join-form" [class.join-form-big]="big" (submit)="$event.preventDefault(); join()" novalidate>
+        <label class="sr-only" [for]="big ? 'join-code-big' : 'join-code'">Invitation code</label>
+        <input
+          [id]="big ? 'join-code-big' : 'join-code'"
+          type="text"
+          class="code-input"
+          [formControl]="joinCtl"
+          placeholder="ABCD-EFGH"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          maxlength="200"
+        />
+        <button type="submit" class="btn" [class.btn-primary]="big" [disabled]="!joinCode()">Go</button>
+      </form>
+    </ng-template>
+
     <div class="page-head">
       <h1>My buildings</h1>
-      @if (!showCreate()) {
-        <button type="button" class="btn btn-primary" (click)="openCreate()">＋ Create building</button>
-      }
+      <div class="row gap wrap">
+        @if (cards().length) {
+          <div class="row gap join-inline">
+            <span class="muted small">Got an invite code?</span>
+            <ng-container *ngTemplateOutlet="joinForm; context: { $implicit: false }" />
+          </div>
+        }
+        @if (!showCreate()) {
+          <button type="button" class="btn btn-primary" (click)="openCreate()">＋ Create building</button>
+        }
+      </div>
     </div>
+
+    @if (!loading() && !loadError() && cards().length === 0) {
+      <section class="card join-empty">
+        <h2>You're not in any building yet — got an invite code?</h2>
+        <p class="muted">Paste the code or link someone sent you, like <code class="code">ABCD-EFGH</code>.</p>
+        <ng-container *ngTemplateOutlet="joinForm; context: { $implicit: true }" />
+        <p class="muted small">No invitation? Create your own building below.</p>
+      </section>
+    }
 
     @if (loadError(); as e) {
       <div class="alert alert-error" role="alert">
@@ -91,10 +130,7 @@ interface BuildingCard {
     @if (loading()) {
       <p class="muted">Loading…</p>
     } @else if (cards().length === 0 && !loadError()) {
-      <div class="empty card">
-        <p><strong>You're not a member of any building yet.</strong></p>
-        <p class="muted">Create one, or ask an admin for an invitation (coming in phase 2).</p>
-      </div>
+      <!-- Empty state is the "join with a code" card at the top. -->
     } @else {
       <div class="cards">
         @for (b of cards(); track b.id) {
@@ -132,6 +168,9 @@ export class BuildingsPage implements OnInit {
   protected readonly showCreate = signal(false);
   protected readonly creating = signal(false);
   protected readonly createError = signal<ErrorText | null>(null);
+
+  protected readonly joinCtl = new FormControl('', { nonNullable: true });
+  protected readonly joinCode = toSignal(this.joinCtl.valueChanges.pipe(map(extractInviteCode)), { initialValue: '' });
 
   protected readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(200)] }),
@@ -172,6 +211,12 @@ export class BuildingsPage implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Accepts "abcd-efgh", "ABCDEFGH" or a pasted join link. */
+  protected join(): void {
+    const code = this.joinCode();
+    if (code) void this.router.navigate(['/join', code]);
   }
 
   protected openCreate(): void {

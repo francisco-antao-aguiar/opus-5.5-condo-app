@@ -5,7 +5,7 @@ import { Action, GovernanceModeDto, RoleCode, RoleDto } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
 import { ConfirmService } from '../core/confirm.service';
-import { applyServerErrors, describeError, ErrorText } from '../core/errors';
+import { applyServerErrors, CONFLICT_RELOADED, describeError, ErrorText, isConflict } from '../core/errors';
 import { ToastService } from '../core/toast.service';
 import { FieldErrorComponent } from '../shared/field-error.component';
 import { ACTION_LABELS, buildPolicyMatrix } from '../shared/policy';
@@ -117,11 +117,22 @@ export class SettingsPage implements OnInit {
         name: v.name.trim(),
         address: v.address.trim() || null,
         governanceMode: v.governanceMode,
+        version: b.version,
       });
       this.ctx.building.set(updated);
       this.toast.success('Settings saved');
       await Promise.all([this.ctx.refreshPermissions(), this.auth.loadMe().catch(() => undefined)]);
     } catch (e) {
+      if (isConflict(e)) {
+        // Refetch: the effect above refills the form with the latest values.
+        try {
+          this.ctx.building.set(await this.api.client.buildings.get(b.id));
+          this.toast.info(CONFLICT_RELOADED, 'Review the settings and save again if needed.');
+        } catch (e2) {
+          this.toast.error(e2);
+        }
+        return;
+      }
       applyServerErrors(this.form, e);
       this.saveError.set(describeError(e));
     } finally {

@@ -13,7 +13,7 @@ public final class BuildingDtos {
     }
 
     public record BuildingDto(UUID id, String name, String address, String governanceMode, UUID rootSpaceId,
-            Instant createdAt) {
+            Instant createdAt, long version) {
     }
 
     public record CreateBuildingRequest(
@@ -27,6 +27,7 @@ public final class BuildingDtos {
     public record UpdateBuildingRequest(
             @NotBlank @Size(max = 200) String name,
             @Size(max = 500) String address,
-            @NotBlank @Size(max = 32) String governanceMode) {
+            @NotBlank @Size(max = 32) String governanceMode,
+            Long version) {
     }
 }

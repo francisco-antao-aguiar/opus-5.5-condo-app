@@ -909,6 +909,129 @@ thead .sticky-col {
   border-left-color: var(--primary);
 }
 
+/* ============ invitations ============ */
+button.chip {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+button.chip:hover {
+  background: var(--surface-2);
+}
+button.chip.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.field .chips {
+  margin-top: 0.25rem;
+}
+.badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.badge-info {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.input-narrow {
+  width: 5.5rem;
+}
+.invite-result {
+  text-align: center;
+  padding: 0.5rem 0;
+}
+.invite-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: clamp(1.8rem, 8vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.6rem 1rem;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  user-select: all;
+}
+.invite-summary {
+  font-weight: 600;
+}
+.invite-copy {
+  justify-content: center;
+  margin: 0.75rem 0 0.5rem;
+}
+.invite-url {
+  overflow-wrap: anywhere;
+}
+.invitations {
+  margin-top: 2rem;
+}
+.invitations .page-head h2 {
+  margin: 0;
+}
+.invitations-table .note {
+  max-width: 16rem;
+  overflow-wrap: anywhere;
+}
+.invitations-table .cell-actions .btn + .btn {
+  margin-left: 0.35rem;
+}
+.join-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.code-input {
+  width: 9.5rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.join-form-big {
+  justify-content: center;
+  margin: 1rem 0;
+}
+.join-form-big .code-input {
+  width: min(16rem, 100%);
+  font-size: 1.3rem;
+  text-align: center;
+}
+.join-empty {
+  text-align: center;
+  border-color: var(--primary);
+}
+.join {
+  max-width: 560px;
+  margin: 3rem auto;
+  text-align: center;
+  padding: 2rem 1.5rem;
+}
+.join-brand {
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+.join-lead {
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+.join-until {
+  margin: 0 0 0.75rem;
+}
+.join-code-line {
+  color: var(--muted);
+}
+.center-actions {
+  justify-content: center;
+  margin: 1rem 0 0.75rem;
+}
+
 /* ============ responsive ============ */
 @media (max-width: 860px) {
   .shell {
@@ -999,5 +1122,12 @@ thead .sticky-col {
   }
   .cell-actions {
     text-align: left;
+  }
+  .join-inline > .muted {
+    display: none;
+  }
+  .join {
+    margin: 1rem auto;
+    padding: 1.5rem 1rem;
   }
 }

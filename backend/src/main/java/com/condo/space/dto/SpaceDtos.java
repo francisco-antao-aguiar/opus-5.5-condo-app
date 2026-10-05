@@ -17,7 +17,7 @@ public final class SpaceDtos {
     }
 
     public record SpaceDto(UUID id, UUID buildingId, UUID parentId, SpaceType type, String name, int sortOrder,
-            Visibility visibility, Visibility effectiveVisibility, int depth) {
+            Visibility visibility, Visibility effectiveVisibility, int depth, long version) {
     }
 
     public record CreateSpaceRequest(
@@ -33,7 +33,8 @@ public final class SpaceDtos {
             @NotBlank @Size(max = 200) String name,
             @NotNull SpaceType type,
             Visibility visibility,
-            @NotNull Integer sortOrder) {
+            @NotNull Integer sortOrder,
+            Long version) {
     }
 
     public record MoveSpaceRequest(@NotNull UUID newParentId, Integer sortOrder) {

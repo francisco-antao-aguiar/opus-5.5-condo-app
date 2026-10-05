@@ -4,9 +4,13 @@ import type { UUID } from '@condo/shared';
 export const queryKeys = {
   me: ['me'] as const,
   governanceModes: ['governance', 'modes'] as const,
+  roles: ['governance', 'roles'] as const,
   buildings: ['buildings'] as const,
   building: (id: UUID) => ['buildings', id] as const,
   permissions: (id: UUID) => ['buildings', id, 'permissions'] as const,
   spaces: (id: UUID) => ['buildings', id, 'spaces'] as const,
   members: (id: UUID) => ['buildings', id, 'members'] as const,
+  invitations: (id: UUID) => ['buildings', id, 'invitations'] as const,
+  /** Public preview, keyed by normalized code. */
+  invitationPreview: (code: string) => ['invitations', 'preview', code] as const,
 };

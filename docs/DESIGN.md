@@ -47,11 +47,10 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 | **Membership** | id, building, user, role, unitSpace?, status, expiresAt? | One per (building, user). `expiresAt` is the *membership* expiry; checked at every authorization. |
 | **Space** | id, buildingId, parentId, type, name, sortOrder, visibility?, path, depth | Generic tree node. |
 
-### Phases 2–5 (planned — fields reserved, not yet created)
+### Phases 3–5 (planned — fields reserved, not yet created)
 
 | Entity | Key fields |
 |---|---|
-| **Invitation** (P2) | id, buildingId, code (short, unique), roleCode, unitSpaceId?, createdBy, maxUses, useCount, expiresAt, membershipExpiresAt?/membershipDuration?, revokedAt |
 | **AssetType** (P3) | code PK (LIGHT, ELEVATOR, DOOR, GATE, INTERCOM, BOILER…), name, icon, builtIn |
 | **ProblemType** (P3) | id, assetTypeCode, buildingId? (null = global catalog), code, label, sortOrder, active |
 | **Asset** (P3) | id (also the QR id), buildingId, spaceId, assetTypeCode, name, createdAt |
@@ -61,6 +60,21 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 | **IssuePhoto** (P4) | id, issueId, storageKey, contentType, size — via `StorageService` |
 | **PushToken** (P5) | id, userId, expoPushToken, platform, lastSeenAt |
 | **Notification** (P5) | id, userId, buildingId, type, payload JSON, readAt, createdAt |
+
+### Phase 2 (implemented)
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| **Invitation** | id, buildingId, code (unique), roleCode, unitSpace?, createdByMembership, maxUses, useCount, expiresAt, membershipExpiresAt? | membershipDurationDays?, note?, revokedAt? | Status is computed: REVOKED > EXPIRED > EXHAUSTED > ACTIVE. Deleting the unit deletes its invitations. |
+| **Membership** (+) | invitationId? | Provenance: which invitation (and so which inviter) a member joined with. |
+
+* **Codes**: 8 characters from a 31-symbol alphabet without look-alikes (no 0/O, 1/I/L) ≈ 40 bits, shown as `ABCD-EFGH`, accepted in any case with or without the dash. Links: `{web}/join/{code}` and `buildingapp://join/{code}`.
+* **Who may invite** = `MEMBER_INVITE` on the invitation's unit (null unit → building-wide, so `OWN_UNIT` holders must pick their unit). The invited role's rank may not exceed the inviter's.
+* **Accept** locks the invitation row (`SELECT … FOR UPDATE`) so concurrent accepts can't exceed `maxUses`, then re-checks that the issuer *still* holds `MEMBER_INVITE` on that unit — an owner who sold their flat can't keep letting people in with an old link. Already-active members are refused (no silent role change); revoked/expired members are reactivated with the invitation's role/unit/expiry.
+* **Preview** (`GET /invitations/{code}`) is public so the join page can say "Ana invited you to Edifício Aurora as tenant of 2B" before sign-up. Failed lookups are rate-limited per caller (user id, else IP).
+* **Membership end**: an invitation carries a fixed `membershipExpiresAt` *or* a `membershipDurationDays` resolved at accept time (accepted at T → expires T + N days), never both (DB check constraint).
+* **Expiry**: access ends exactly at `expiresAt` because `PermissionService` checks it on every call. A scheduled job (`app.memberships.expiry-cron`, default every 15 min) also flips such rows to `EXPIRED` so lists and reports agree. Setting a new future expiry on an expired member reactivates them.
+* **Concurrency**: Space, Member and Building DTOs expose `version`; updates may send it back and get `409 CONFLICT` when stale.
 
 ### Phase 6 compatibility (design only)
 
@@ -141,6 +155,16 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 | PUT | `/buildings/{b}/members/{m}` | `MEMBER_MANAGE` on member's unit |
 | DELETE | `/buildings/{b}/members/{m}` | `MEMBER_MANAGE` on member's unit (revoke) |
 
+### Phase 2 endpoints
+
+| Method | Path | Auth / action |
+|---|---|---|
+| GET | `/buildings/{b}/invitations` | `MEMBER_INVITE` — only invitations for spaces the caller may invite into |
+| POST | `/buildings/{b}/invitations` | `MEMBER_INVITE` on the unit (or building-wide when unit is null) |
+| DELETE | `/buildings/{b}/invitations/{id}` | `MEMBER_INVITE` on its unit (revoke) |
+| GET | `/invitations/{code}` | public, rate-limited — preview |
+| POST | `/invitations/{code}/accept` | authenticated |
+
 ## 4. Assumptions
 
 1. **One membership per user per building**, with at most one unit. An owner of two units (flat + garage box) would need a `membership_unit` join table — easy to add, but it changes the `OWN_UNIT` check to "any of my units".
@@ -150,3 +174,5 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 5. **Expiry is checked at authorization time** in `PermissionService`; phase 2 adds a scheduled job that flips `status` to `EXPIRED` for reporting, but correctness never depends on it.
 6. Building creation is open to any authenticated user (they become ADMIN of it).
 7. Access tokens: 15 min JWT (HS256). Refresh tokens: 30 days, opaque, rotated.
+8. **Owners may invite co-owners** into their own unit (same rank), not just tenants. *(Confirmed.)*
+9. **Membership end** is either a fixed date chosen when inviting (end of lease) or a duration counted from acceptance (e.g. 7 days for a guest; 7 is the UI preset), never both. No end date is the default. *(Confirmed.)*

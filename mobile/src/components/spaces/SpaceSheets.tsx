@@ -127,13 +127,21 @@ export function EditSpaceSheet({
 
   useEffect(() => {
     if (node) {
-      setName(node.name);
-      setVisibility(node.visibility);
       update.reset();
       remove.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id]);
+
+  // New node, or a newer version arrived (e.g. after a 409 CONFLICT refetch): show the latest values.
+  // The conflict message stays visible because the mutation is not reset here.
+  useEffect(() => {
+    if (node) {
+      setName(node.name);
+      setVisibility(node.visibility);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node?.id, node?.version]);
 
   if (!node) return <Sheet visible={false} title="" onClose={onClose}>{null}</Sheet>;
   const current = node;

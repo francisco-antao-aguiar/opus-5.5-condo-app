@@ -1,8 +1,8 @@
 <div class="page-head">
   <h1>Members</h1>
-  <button type="button" class="btn" disabled [title]="canInvite() ? 'Invitations arrive in phase 2' : 'You cannot invite members'">
-    ✉ Invite (coming in phase 2)
-  </button>
+  @if (canInvite()) {
+    <button type="button" class="btn btn-primary" [disabled]="!roles().length" (click)="inviteOpen.set(true)">✉ Invite people</button>
+  }
 </div>
 
 @if (loadError(); as e) {
@@ -34,7 +34,16 @@
                   <div class="member-edit-who">
                     <strong>{{ m.displayName }}</strong>
                     <span class="muted">{{ m.email ?? '—' }}</span>
+                    @if (m.invitedByName) {
+                      <span class="muted small">Invited by {{ m.invitedByName }}</span>
+                    }
                   </div>
+                  @if (editingExpired()) {
+                    <p class="alert alert-warn full">
+                      {{ m.displayName }}'s access ended{{ m.expiresAt ? ' on ' + (m.expiresAt | date: 'mediumDate') : '' }}.
+                      Set a new end date in the future and save to restore their access.
+                    </p>
+                  }
                   <label class="field">
                     <span>Role</span>
                     <select formControlName="role">
@@ -65,6 +74,9 @@
                         <button type="button" class="btn btn-sm" (click)="form.controls.expiresAt.setValue('')">Clear</button>
                       }
                     </div>
+                    @if (editingExpired() && form.controls.expiresAt.value && form.controls.expiresAt.value < today) {
+                      <small class="muted">That date is in the past — pick today or later to restore access.</small>
+                    }
                     <app-field-error [control]="form.controls.expiresAt" label="Expiry" />
                   </label>
                   @if (editError(); as e) {
@@ -83,27 +95,27 @@
               </td>
             </tr>
           } @else {
-            <tr [class.inactive]="m.status !== 'ACTIVE' || isExpired(m)">
+            <tr [class.inactive]="isInactive(m)">
               <td data-label="Name">
                 <strong>{{ m.displayName }}</strong>
                 @if (m.userId === myUserId()) {
                   <span class="badge">you</span>
+                }
+                @if (m.invitedByName) {
+                  <div class="muted small">Invited by {{ m.invitedByName }}</div>
                 }
               </td>
               <td data-label="Email">{{ m.email ?? '—' }}</td>
               <td data-label="Role"><span class="badge badge-role">{{ roleNames().get(m.role) ?? m.role }}</span></td>
               <td data-label="Unit">{{ m.unitName ?? '—' }}</td>
               <td data-label="Status">
-                @if (m.status === 'ACTIVE' && isExpired(m)) {
-                  <span class="badge badge-warn">Expired</span>
-                } @else {
-                  <span class="badge" [class.badge-ok]="m.status === 'ACTIVE'" [class.badge-warn]="m.status !== 'ACTIVE'">{{ m.status | titlecase }}</span>
-                }
+                @let badge = memberBadge(m);
+                <span [class]="'badge ' + badge.cls">{{ badge.label }}</span>
               </td>
               <td data-label="Expires">{{ m.expiresAt ? (m.expiresAt | date: 'mediumDate') : 'Never' }}</td>
               <td class="cell-actions">
                 @if (canManage(m)) {
-                  <button type="button" class="btn btn-sm" (click)="startEdit(m)">Edit</button>
+                  <button type="button" class="btn btn-sm" (click)="startEdit(m)">{{ isInactive(m) ? 'Restore…' : 'Edit' }}</button>
                 }
               </td>
             </tr>
@@ -114,4 +126,103 @@
       </tbody>
     </table>
   </div>
+}
+
+@if (canInvite()) {
+  <section class="invitations">
+    <div class="page-head">
+      <h2>Invitations</h2>
+      <div class="row gap">
+        <label class="check small">
+          <input type="checkbox" [checked]="showAllInvitations()" (change)="showAllInvitations.set($any($event.target).checked)" />
+          <span>Show all</span>
+        </label>
+        <button type="button" class="btn btn-sm" [disabled]="invitationsLoading()" (click)="loadInvitations()">↻ Refresh</button>
+      </div>
+    </div>
+
+    @if (invitationsError(); as e) {
+      <div class="alert alert-error" role="alert">
+        <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+        <button type="button" class="btn btn-sm" (click)="loadInvitations()">Retry</button>
+      </div>
+    } @else if (invitationsLoading() && !invitations().length) {
+      <p class="muted">Loading invitations…</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="table members-table invitations-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Role</th>
+              <th>Unit</th>
+              <th>Uses</th>
+              <th>Status</th>
+              <th>Valid until</th>
+              <th>Membership</th>
+              <th>Created by</th>
+              <th><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (inv of visibleInvitations(); track inv.id) {
+              @let ib = invitationBadge(inv.status);
+              <tr [class.inactive]="inv.status !== 'ACTIVE'">
+                <td data-label="Code">
+                  <code class="code">{{ formatCode(inv.code) }}</code>
+                  @if (inv.note) {
+                    <div class="muted small note">{{ inv.note }}</div>
+                  }
+                </td>
+                <td data-label="Role"><span class="badge badge-role">{{ roleNames().get(inv.role) ?? inv.role }}</span></td>
+                <td data-label="Unit">{{ inv.unitName ?? 'Whole building' }}</td>
+                <td data-label="Uses">{{ inv.useCount }}/{{ inv.maxUses }}</td>
+                <td data-label="Status"><span [class]="'badge ' + ib.cls">{{ ib.label }}</span></td>
+                <td data-label="Valid until">{{ inv.expiresAt | date: 'medium' }}</td>
+                <td data-label="Membership">
+                  @if (inv.membershipExpiresAt) {
+                    until {{ inv.membershipExpiresAt | date: 'mediumDate' }}
+                  } @else if (inv.membershipDurationDays) {
+                    {{ inv.membershipDurationDays }} day{{ inv.membershipDurationDays === 1 ? '' : 's' }} after joining
+                  } @else {
+                    No end date
+                  }
+                </td>
+                <td data-label="Created by">
+                  {{ inv.createdByName }}
+                  <div class="muted small">{{ inv.createdAt | date: 'mediumDate' }}</div>
+                </td>
+                <td class="cell-actions">
+                  @if (inv.status === 'ACTIVE') {
+                    <button type="button" class="btn btn-sm" (click)="copyLink(inv)">Copy link</button>
+                    <button type="button" class="btn btn-sm btn-danger" (click)="revokeInvitation(inv)">Revoke</button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="9" class="muted">
+                  {{ showAllInvitations() ? 'No invitations yet.' : 'No active invitations.' }}
+                  @if (hiddenInvitationCount() > 0) {
+                    <button type="button" class="btn btn-sm" (click)="showAllInvitations.set(true)">Show {{ hiddenInvitationCount() }} inactive</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+}
+
+@if (inviteOpen()) {
+  <app-invite-dialog
+    [buildingId]="ctx.buildingId()!"
+    [roles]="grantableRoles()"
+    [targets]="inviteTargets()"
+    [roleNames]="roleNames()"
+    (invited)="onInvited($event)"
+    (closed)="inviteOpen.set(false)"
+  />
 }

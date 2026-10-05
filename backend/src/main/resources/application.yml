@@ -43,6 +43,15 @@ app:
     refresh-token-ttl: 30d
   cors:
     allowed-origins: http://localhost:4200,http://localhost:8081,http://localhost:19006
+  links:
+    web-base-url: ${APP_WEB_BASE_URL:http://localhost:4200}
+    app-scheme: buildingapp
+  invitations:
+    max-failed-lookups: 10
+    lookup-window: 15m
+  memberships:
+    # Flips ACTIVE memberships past their end date to EXPIRED. Access is already cut at check time.
+    expiry-cron: "0 */15 * * * *"
 
 springdoc:
   swagger-ui:

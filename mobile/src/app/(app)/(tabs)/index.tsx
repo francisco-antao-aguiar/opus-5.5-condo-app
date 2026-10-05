@@ -6,7 +6,7 @@ import { useAuth } from '../../../auth/AuthProvider';
 import { Badge, RoleBadge } from '../../../components/Badges';
 import { Button } from '../../../components/Button';
 import { ListRow } from '../../../components/ListRow';
-import { EmptyView, QueryGate } from '../../../components/StateView';
+import { QueryGate, StateView } from '../../../components/StateView';
 import { useBuildings } from '../../../hooks/queries';
 import { formatDate, isPast, roleLabel } from '../../../lib/format';
 import { spacing, useTheme } from '../../../theme';
@@ -37,6 +37,7 @@ export default function BuildingsScreen() {
   }
 
   const goCreate = () => router.push('/buildings/new');
+  const goJoin = () => router.push('/join');
 
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -49,10 +50,12 @@ export default function BuildingsScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
             ListEmptyComponent={
-              <EmptyView
+              <StateView
+                glyph={'⌂'}
                 title="No buildings yet"
-                message="Create your building, or ask an admin for an invitation."
-                action={{ label: 'Create building', onPress: goCreate }}
+                message="Got an invitation? Enter its code to join your building — or create a new one."
+                action={{ label: 'Join with a code', onPress: goJoin }}
+                secondaryAction={{ label: 'Create building', onPress: goCreate }}
               />
             }
             renderItem={({ item: { building, membership } }) => {
@@ -79,7 +82,10 @@ export default function BuildingsScreen() {
             }}
             ListFooterComponent={
               rows.length > 0 ? (
-                <Button title="Create building" variant="secondary" onPress={goCreate} style={styles.footer} />
+                <View style={styles.footer}>
+                  <Button title="Join with a code" variant="secondary" onPress={goJoin} />
+                  <Button title="Create building" variant="ghost" onPress={goCreate} />
+                </View>
               ) : null
             }
           />
@@ -92,5 +98,5 @@ export default function BuildingsScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   list: { padding: spacing.lg, flexGrow: 1 },
-  footer: { marginTop: spacing.xl },
+  footer: { marginTop: spacing.xl, gap: spacing.sm },
 });

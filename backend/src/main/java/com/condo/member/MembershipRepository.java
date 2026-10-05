@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,7 +20,7 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
             + "and (m.expiresAt is null or m.expiresAt > :now) order by m.building.name")
     List<Membership> findActiveByUser(@Param("userId") UUID userId, @Param("now") Instant now);
 
-    @Query("select m from Membership m join fetch m.user left join fetch m.unitSpace "
+    @Query("select m from Membership m join fetch m.user left join fetch m.unitSpace left join fetch m.invitedBy "
             + "where m.building.id = :buildingId order by m.user.displayName")
     List<Membership> findByBuildingWithUsers(@Param("buildingId") UUID buildingId);
 
@@ -31,4 +32,11 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
             + "and m.status = com.condo.member.MembershipStatus.ACTIVE "
             + "and (m.expiresAt is null or m.expiresAt > :now)")
     long countActiveAdmins(@Param("buildingId") UUID buildingId, @Param("now") Instant now);
+
+    /** Persists expiry for reporting. Access itself already ends at expiresAt (see Membership#isActiveAt). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Membership m set m.status = com.condo.member.MembershipStatus.EXPIRED, m.updatedAt = :now "
+            + "where m.status = com.condo.member.MembershipStatus.ACTIVE and m.expiresAt is not null "
+            + "and m.expiresAt <= :now")
+    int markExpired(@Param("now") Instant now);
 }

@@ -64,6 +64,9 @@ export default function LoginScreen() {
       <Link href="/register" asChild>
         <Button title="Create an account" variant="ghost" />
       </Link>
+      <Link href="/join" asChild>
+        <Button title="I have an invite code" variant="ghost" />
+      </Link>
     </ScrollScreen>
   );
 }

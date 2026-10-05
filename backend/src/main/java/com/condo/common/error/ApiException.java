@@ -1,5 +1,7 @@
 package com.condo.common.error;
 
+import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 
 /**
@@ -10,11 +12,23 @@ public class ApiException extends RuntimeException {
 
     private final HttpStatus status;
     private final String code;
+    private final List<Map<String, String>> fieldErrors;
 
     public ApiException(HttpStatus status, String code, String message) {
+        this(status, code, message, List.of());
+    }
+
+    private ApiException(HttpStatus status, String code, String message, List<Map<String, String>> fieldErrors) {
         super(message);
         this.status = status;
         this.code = code;
+        this.fieldErrors = fieldErrors;
+    }
+
+    /** A validation failure on one field that Bean Validation can't express (depends on "now", other rows…). */
+    public static ApiException invalidField(String field, String message) {
+        return new ApiException(HttpStatus.BAD_REQUEST, ErrorCodes.VALIDATION_FAILED, "Some fields are invalid.",
+                List.of(Map.of("field", field, "message", message)));
     }
 
     public static ApiException notFound(String what) {
@@ -43,5 +57,9 @@ public class ApiException extends RuntimeException {
 
     public String getCode() {
         return code;
+    }
+
+    public List<Map<String, String>> getFieldErrors() {
+        return fieldErrors;
     }
 }
