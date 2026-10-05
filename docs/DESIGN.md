@@ -129,13 +129,14 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 * Push goes through `PushSender`: `ExpoPushSender` (batches of 100 to the Expo push API, deletes tokens rejected as `DeviceNotRegistered`) when `app.push.enabled=true`, otherwise a logging sender (dev default, tests). An Expo access token can be set via `APP_PUSH_ACCESS_TOKEN`.
 * Out of scope for now: per-user notification preferences and quiet hours (a `notification_preference` table keyed by user × type would slot in front of delivery).
 
-### Phase 6 compatibility (design only)
+### Phase 6 (design only — see [PHASE-6-DESIGN.md](PHASE-6-DESIGN.md))
 
-* **Maintenance schedules / recurring tasks** → `maintenance_plan(assetId|spaceId, rrule, nextDueAt)` producing `task` rows; tasks can reuse the Issue timeline pattern. Assets and spaces are already stable targets.
-* **Announcements** → `announcement(buildingId, audienceSpaceId?, …)`; audience is a subtree of the space tree (same `path` prefix logic as permissions).
-* **Shared-space booking** → `bookable` flag/config on `space` (COMMON_AREA nodes) + `booking(spaceId, membershipId, start, end)`.
-* **Cost tracking** → `cost_entry(buildingId, issueId?|taskId?|assetId?, amount, currency, …)`.
-* Each of these adds new **actions** (`ANNOUNCEMENT_POST`, `BOOKING_CREATE`, `COST_VIEW`…) as rows in `permission_policy` — no new authorization code path.
+* **Maintenance schedules / recurring tasks** → `maintenance_plan` (asset or space target, small validated recurrence, lead days); each due occurrence is an **Issue with `kind = SCHEDULED`**, reusing lifecycle, timeline, photos, notifications and the triage board.
+* **Announcements** → `announcement` with an audience = whole building or a space **subtree** (same `path` logic as `OWN_UNIT`), optional role filter, scheduled publishing, read receipts.
+* **Shared-space booking** → `booking_policy` (per space: hours, slots, limits, approval) + `booking`; overlaps prevented under a row lock; expired members' future bookings are cancelled.
+* **Cost tracking** → `cost_entry` (money as NUMERIC/BigDecimal, receipts via `StorageService`), anchored to issues, plans, assets or spaces; privacy inherited from the anchor; summaries and CSV export. Tracking only, not billing.
+* New actions `MAINTENANCE_*`, `ANNOUNCEMENT_POST`, `BOOKING_*`, `COST_*` are policy rows as before.
+* **Blocker audit: none.** Additive changes only: `building.time_zone` and `currency`, `issue.kind`/`due_on` with a relaxed problem check, a generic notification API next to `IssueActivity`, extra space/asset deletion guards, and a job lock once the backend runs on several nodes.
 
 ### Tree storage strategy — adjacency list + materialized path
 
