@@ -1,0 +1,117 @@
+<div class="page-head">
+  <h1>Members</h1>
+  <button type="button" class="btn" disabled [title]="canInvite() ? 'Invitations arrive in phase 2' : 'You cannot invite members'">
+    ✉ Invite (coming in phase 2)
+  </button>
+</div>
+
+@if (loadError(); as e) {
+  <div class="alert alert-error" role="alert">
+    <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+  </div>
+} @else if (loading() && !members().length) {
+  <p class="muted">Loading members…</p>
+} @else {
+  <div class="table-wrap">
+    <table class="table members-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Unit</th>
+          <th>Status</th>
+          <th>Expires</th>
+          <th><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (m of sorted(); track m.id) {
+          @if (editingId() === m.id) {
+            <tr class="editing">
+              <td colspan="7">
+                <form [formGroup]="form" (ngSubmit)="save(m)" class="member-edit" novalidate>
+                  <div class="member-edit-who">
+                    <strong>{{ m.displayName }}</strong>
+                    <span class="muted">{{ m.email ?? '—' }}</span>
+                  </div>
+                  <label class="field">
+                    <span>Role</span>
+                    <select formControlName="role">
+                      @for (r of grantableRoles(); track r.code) {
+                        <option [value]="r.code">{{ r.name }}</option>
+                      }
+                      @if (!isGrantable(m.role)) {
+                        <option [value]="m.role">{{ roleNames().get(m.role) ?? m.role }}</option>
+                      }
+                    </select>
+                    <app-field-error [control]="form.controls.role" label="Role" />
+                  </label>
+                  <label class="field">
+                    <span>Unit</span>
+                    <select formControlName="unitId">
+                      <option value="">— No unit —</option>
+                      @for (u of ctx.units(); track u.id) {
+                        <option [value]="u.id">{{ u.label }}</option>
+                      }
+                    </select>
+                    <app-field-error [control]="form.controls.unitId" label="Unit" />
+                  </label>
+                  <label class="field">
+                    <span>Access expires <small class="muted">(empty = never)</small></span>
+                    <div class="row gap">
+                      <input type="date" formControlName="expiresAt" />
+                      @if (form.controls.expiresAt.value) {
+                        <button type="button" class="btn btn-sm" (click)="form.controls.expiresAt.setValue('')">Clear</button>
+                      }
+                    </div>
+                    <app-field-error [control]="form.controls.expiresAt" label="Expiry" />
+                  </label>
+                  @if (editError(); as e) {
+                    <div class="alert alert-error full" role="alert">
+                      <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+                    </div>
+                  }
+                  <div class="actions full">
+                    <button type="button" class="btn btn-danger btn-sm push-left" [disabled]="saving()" (click)="revoke(m)">
+                      {{ m.userId === myUserId() ? 'Leave building' : 'Revoke access' }}
+                    </button>
+                    <button type="button" class="btn" (click)="cancelEdit()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Save' }}</button>
+                  </div>
+                </form>
+              </td>
+            </tr>
+          } @else {
+            <tr [class.inactive]="m.status !== 'ACTIVE' || isExpired(m)">
+              <td data-label="Name">
+                <strong>{{ m.displayName }}</strong>
+                @if (m.userId === myUserId()) {
+                  <span class="badge">you</span>
+                }
+              </td>
+              <td data-label="Email">{{ m.email ?? '—' }}</td>
+              <td data-label="Role"><span class="badge badge-role">{{ roleNames().get(m.role) ?? m.role }}</span></td>
+              <td data-label="Unit">{{ m.unitName ?? '—' }}</td>
+              <td data-label="Status">
+                @if (m.status === 'ACTIVE' && isExpired(m)) {
+                  <span class="badge badge-warn">Expired</span>
+                } @else {
+                  <span class="badge" [class.badge-ok]="m.status === 'ACTIVE'" [class.badge-warn]="m.status !== 'ACTIVE'">{{ m.status | titlecase }}</span>
+                }
+              </td>
+              <td data-label="Expires">{{ m.expiresAt ? (m.expiresAt | date: 'mediumDate') : 'Never' }}</td>
+              <td class="cell-actions">
+                @if (canManage(m)) {
+                  <button type="button" class="btn btn-sm" (click)="startEdit(m)">Edit</button>
+                }
+              </td>
+            </tr>
+          }
+        } @empty {
+          <tr><td colspan="7" class="muted">No members.</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

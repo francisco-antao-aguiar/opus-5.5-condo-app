@@ -1,0 +1,165 @@
+<div class="page-head">
+  <h1>Structure</h1>
+  @if (canQuickSetup()) {
+    <button type="button" class="btn" (click)="openWizard()">⚡ Quick setup</button>
+  }
+</div>
+
+<div class="toolbar">
+  <input
+    type="search"
+    class="grow"
+    placeholder="Filter by name…"
+    aria-label="Filter spaces by name"
+    [value]="filter()"
+    (input)="filter.set($any($event.target).value)"
+  />
+  <button type="button" class="btn btn-sm" (click)="expandAll()" [disabled]="filtering()">Expand all</button>
+  <button type="button" class="btn btn-sm" (click)="collapseAll()" [disabled]="filtering()">Collapse all</button>
+  <span class="muted small">{{ ctx.spaces().length }} spaces</span>
+</div>
+
+@if (!canEditAny()) {
+  <p class="muted small">You can view this building's structure. Editing requires the "Edit structure" permission.</p>
+}
+
+<div class="tree" role="tree" aria-label="Building structure" [class.busy]="busy()">
+  @for (row of rows(); track row.node.id) {
+    @let node = row.node;
+    @let canEdit = editable().has(node.id);
+    <div
+      class="tree-row"
+      role="treeitem"
+      [attr.aria-expanded]="row.hasChildren ? row.expanded : null"
+      [attr.aria-level]="row.depth + 1"
+      [class.open]="openId() === node.id"
+      [class.match]="row.match"
+      [style.padding-left.rem]="row.depth * 1.25 + 0.25"
+    >
+      <button
+        type="button"
+        class="twisty"
+        [class.leaf]="!row.hasChildren"
+        [disabled]="!row.hasChildren || filtering()"
+        [attr.aria-label]="row.expanded ? 'Collapse ' + node.name : 'Expand ' + node.name"
+        (click)="toggle(node.id)"
+      >
+        {{ row.hasChildren ? (row.expanded ? '▾' : '▸') : '·' }}
+      </button>
+      <span class="type-badge" [class]="'type-badge type-' + node.type" [title]="typeLabels[node.type]">{{ icons[node.type] }}</span>
+      <span class="node-name">{{ node.name }}</span>
+      <span class="node-type muted">{{ typeLabels[node.type] }}</span>
+      <span
+        class="badge"
+        [class.badge-common]="node.effectiveVisibility === 'COMMON'"
+        [class.badge-private]="node.effectiveVisibility === 'PRIVATE'"
+        [title]="node.visibility === null ? 'Inherited from parent' : 'Set on this space'"
+      >
+        {{ node.effectiveVisibility === 'COMMON' ? 'Common' : 'Private' }}@if (node.visibility === null) {<em> · inherited</em>}
+      </span>
+      @if (canEdit) {
+        <button
+          type="button"
+          class="btn-icon tools-toggle"
+          [attr.aria-expanded]="openId() === node.id"
+          [attr.aria-label]="'Edit ' + node.name"
+          (click)="toggleTools(node)"
+        >
+          {{ openId() === node.id ? '✕' : '⋯' }}
+        </button>
+      }
+    </div>
+
+    @if (canEdit && openId() === node.id) {
+      @let isRoot = node.type === 'BUILDING' || node.parentId === null;
+      @let pos = siblingIndex(node);
+      <div class="tree-tools" [style.margin-left.rem]="row.depth * 1.25 + 0.25">
+        <form class="tool-group" (submit)="$event.preventDefault(); rename(node)">
+          <label class="sr-only" [for]="'rename-' + node.id">Name</label>
+          <input [id]="'rename-' + node.id" type="text" [formControl]="renameCtl" />
+          <button type="submit" class="btn btn-sm" [disabled]="busy() || renameCtl.invalid || renameCtl.value.trim() === node.name">Rename</button>
+        </form>
+
+        <label class="tool-group">
+          <span class="small muted">Visibility</span>
+          <select [value]="visibilityChoice(node)" (change)="setVisibility(node, $any($event.target).value)" [disabled]="busy() || isRoot">
+            <option value="INHERIT" [selected]="node.visibility === null">Inherit ({{ node.effectiveVisibility === 'COMMON' ? 'Common' : 'Private' }})</option>
+            <option value="COMMON" [selected]="node.visibility === 'COMMON'">Common</option>
+            <option value="PRIVATE" [selected]="node.visibility === 'PRIVATE'">Private</option>
+          </select>
+        </label>
+
+        <form class="tool-group" (submit)="$event.preventDefault(); addChild(node)">
+          <span class="small muted">Add inside</span>
+          <select [formControl]="addTypeCtl" aria-label="New space type">
+            @for (t of childTypes; track t) {
+              <option [value]="t">{{ typeLabels[t] }}</option>
+            }
+          </select>
+          <input type="text" [formControl]="addNameCtl" placeholder="Name" aria-label="New space name" />
+          <button type="submit" class="btn btn-sm btn-primary" [disabled]="busy()">＋ Add</button>
+        </form>
+
+        @if (!isRoot) {
+          <div class="tool-group">
+            <button type="button" class="btn btn-sm" aria-label="Move up" title="Move up" [disabled]="busy() || pos.index <= 0" (click)="reorder(node, -1)">▲</button>
+            <button type="button" class="btn btn-sm" aria-label="Move down" title="Move down" [disabled]="busy() || pos.index >= pos.count - 1" (click)="reorder(node, 1)">▼</button>
+            <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="openMove(node)">Move to…</button>
+            <button type="button" class="btn btn-sm btn-danger" [disabled]="busy()" (click)="remove(node)">Delete</button>
+          </div>
+        }
+      </div>
+    }
+  } @empty {
+    @if (filtering()) {
+      <p class="muted pad">No spaces match “{{ filter() }}”.</p>
+    } @else {
+      <p class="muted pad">This building has no structure yet.</p>
+    }
+  }
+</div>
+
+@if (moving(); as node) {
+  <app-modal [title]="'Move “' + node.name + '” to…'" (closed)="moving.set(null)">
+    <input
+      type="search"
+      class="block"
+      placeholder="Filter targets…"
+      aria-label="Filter move targets"
+      [value]="moveFilter()"
+      (input)="moveFilter.set($any($event.target).value)"
+    />
+    <ul class="pick-list">
+      @for (o of moveOptions(); track o.space.id) {
+        <li>
+          <button type="button" [disabled]="busy()" (click)="moveTo(o.space)">
+            <span>{{ icons[o.space.type] }}</span> {{ o.label }}
+          </button>
+        </li>
+      } @empty {
+        <li class="muted pad">No valid destinations.</li>
+      }
+    </ul>
+  </app-modal>
+}
+
+@if (wizardOpen()) {
+  <app-modal title="Quick setup" [wide]="true" (closed)="wizardOpen.set(false)">
+    <p class="muted small">Generates floors, units and common areas under the building root.</p>
+    <app-structure-wizard />
+    @if (wizardConflict()) {
+      <div class="alert alert-warn" role="alert">
+        <strong>This building already has structure.</strong>
+        <p>Appending adds the generated spaces next to the existing ones — names may repeat.</p>
+      </div>
+    }
+    <div modal-footer>
+      <button type="button" class="btn" (click)="wizardOpen.set(false)">Cancel</button>
+      @if (wizardConflict()) {
+        <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="generate(true)">Append anyway</button>
+      } @else {
+        <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="generate(false)">Generate</button>
+      }
+    </div>
+  </app-modal>
+}

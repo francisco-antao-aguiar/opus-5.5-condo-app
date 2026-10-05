@@ -1,0 +1,13 @@
+{
+  "name": "condo-app",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "web",
+    "mobile"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @condo/shared",
+    "postinstall": "npm run build -w @condo/shared"
+  }
+}
