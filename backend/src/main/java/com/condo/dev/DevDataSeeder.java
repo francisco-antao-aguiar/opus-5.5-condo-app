@@ -1,5 +1,11 @@
 package com.condo.dev;
 
+import com.condo.asset.Asset;
+import com.condo.asset.AssetRepository;
+import com.condo.asset.ProblemType;
+import com.condo.asset.ProblemTypeHidden;
+import com.condo.asset.ProblemTypeHiddenRepository;
+import com.condo.asset.ProblemTypeRepository;
 import com.condo.auth.User;
 import com.condo.auth.UserRepository;
 import com.condo.building.Building;
@@ -19,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -47,17 +54,24 @@ public class DevDataSeeder implements ApplicationRunner {
     private final SpaceRepository spaces;
     private final MembershipRepository memberships;
     private final InvitationRepository invitations;
+    private final AssetRepository assets;
+    private final ProblemTypeRepository problemTypes;
+    private final ProblemTypeHiddenRepository hiddenProblemTypes;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
     public DevDataSeeder(UserRepository users, BuildingRepository buildings, SpaceRepository spaces,
-            MembershipRepository memberships, InvitationRepository invitations, PasswordEncoder passwordEncoder,
-            Clock clock) {
+            MembershipRepository memberships, InvitationRepository invitations, AssetRepository assets,
+            ProblemTypeRepository problemTypes, ProblemTypeHiddenRepository hiddenProblemTypes,
+            PasswordEncoder passwordEncoder, Clock clock) {
         this.users = users;
         this.buildings = buildings;
         this.spaces = spaces;
         this.memberships = memberships;
         this.invitations = invitations;
+        this.assets = assets;
+        this.problemTypes = problemTypes;
+        this.hiddenProblemTypes = hiddenProblemTypes;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
     }
@@ -83,12 +97,12 @@ public class DevDataSeeder implements ApplicationRunner {
         Space root = add(s, Space.root(aurora.getId(), aurora.getName()));
 
         Space basement = add(s, floor(root, "Basement -1", -1));
-        add(s, common(basement, "Garage", 0));
+        Space garage = add(s, common(basement, "Garage", 0));
         add(s, common(basement, "Storage room", 1));
-        add(s, common(basement, "Boiler room", 2));
+        Space boilerRoom = add(s, common(basement, "Boiler room", 2));
 
         Space ground = add(s, floor(root, "Ground floor", 0));
-        add(s, common(ground, "Lobby", 0));
+        Space lobby = add(s, common(ground, "Lobby", 0));
         add(s, unit(ground, "Café Aurora (shop)", 1));
         add(s, unit(ground, "0A", 2));
 
@@ -108,8 +122,8 @@ public class DevDataSeeder implements ApplicationRunner {
                 unit2B = x;
             }
         }
-        add(s, Space.childOf(unit2B, SpaceType.ROOM, "Kitchen", 0, null));
-        add(s, Space.childOf(unit2B, SpaceType.ROOM, "Bathroom", 1, null));
+        Space kitchen2B = add(s, Space.childOf(unit2B, SpaceType.ROOM, "Kitchen", 0, null));
+        Space bathroom2B = add(s, Space.childOf(unit2B, SpaceType.ROOM, "Bathroom", 1, null));
 
         Space f3 = add(s, floor(root, "Floor 3", 3));
         add(s, unit(f3, "3A", 0));
@@ -123,10 +137,35 @@ public class DevDataSeeder implements ApplicationRunner {
         Space unit4A = add(s, unit(f4, "4A", 0));
         add(s, unit(f4, "4B", 1));
 
-        add(s, common(root, "Stairwell", 10_000));
-        add(s, common(root, "Elevator shaft", 10_001));
-        add(s, common(root, "Roof", 10_002));
+        Space stairwell = add(s, common(root, "Stairwell", 10_000));
+        Space shaft = add(s, common(root, "Elevator shaft", 10_001));
+        Space roof = add(s, common(root, "Roof", 10_002));
         spaces.saveAll(s);
+
+        // ---------- Assets ----------
+        UUID a = aurora.getId();
+        List<Asset> items = new ArrayList<>(List.of(
+                new Asset(a, lobby.getId(), "LIGHT", "Lobby ceiling light", null),
+                new Asset(a, lobby.getId(), "DOOR", "Main entrance door", "Glass door with magnetic lock"),
+                new Asset(a, lobby.getId(), "INTERCOM", "Entrance intercom", null),
+                new Asset(a, lobby.getId(), "FIRE_SAFETY", "Lobby fire extinguisher", "Inspected yearly in March"),
+                new Asset(a, shaft.getId(), "ELEVATOR", "Elevator", "Schindler 3300, 6 people"),
+                new Asset(a, garage.getId(), "GATE", "Garage gate", "Opened with remote"),
+                new Asset(a, garage.getId(), "LIGHT", "Garage lights", null),
+                new Asset(a, boilerRoom.getId(), "BOILER", "Central boiler", null),
+                new Asset(a, roof.getId(), "DOOR", "Roof access door", null),
+                new Asset(a, kitchen2B.getId(), "PLUMBING", "Kitchen sink", null),
+                new Asset(a, bathroom2B.getId(), "BOILER", "Water heater", "Private to 2B"),
+                new Asset(a, duplex.getId(), "WINDOW", "Skylight", null)));
+        for (Space floor : List.of(basement, ground, f1, f2, f3, f4)) {
+            items.add(new Asset(a, floor.getId(), "LIGHT", "Stairwell light", null));
+        }
+        items.add(new Asset(a, stairwell.getId(), "FIRE_SAFETY", "Emergency lighting", null));
+        assets.saveAll(items);
+
+        // Building-specific catalog: an extra gate problem, and a built-in this building doesn't want offered.
+        problemTypes.save(ProblemType.custom(a, "GATE", "Remote doesn't work", 10));
+        hiddenProblemTypes.save(new ProblemTypeHidden(a, UUID.fromString("00000000-0000-0000-0001-000000000004")));
 
         Membership adminM = memberships.save(new Membership(aurora, admin, Role.ADMIN, null, null));
         memberships.save(new Membership(aurora, manager, Role.MANAGER, null, null));
@@ -157,8 +196,11 @@ public class DevDataSeeder implements ApplicationRunner {
         Space flatG = add(p, unit(pg, "Ground flat", 0));
         Space p1 = add(p, floor(proot, "First floor", 1));
         add(p, unit(p1, "First floor flat", 0));
-        add(p, common(proot, "Shared garden", 100));
+        Space garden = add(p, common(proot, "Shared garden", 100));
         spaces.saveAll(p);
+        assets.saveAll(List.of(
+                new Asset(patio.getId(), garden.getId(), "GATE", "Garden gate", null),
+                new Asset(patio.getId(), garden.getId(), "LIGHT", "Garden lamp", null)));
         memberships.save(new Membership(patio, owner2, Role.ADMIN, null, null));
         memberships.save(new Membership(patio, owner, Role.OWNER, flatG, null));
 

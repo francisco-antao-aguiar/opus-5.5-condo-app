@@ -59,6 +59,11 @@ export type ErrorCode =
   | 'INVITATION_INVALID'
   | 'ALREADY_MEMBER'
   | 'TOO_MANY_ATTEMPTS'
+  | 'UNKNOWN_ASSET_TYPE'
+  | 'SPACE_HAS_ASSETS'
+  | 'ASSET_ARCHIVED'
+  | 'BUILT_IN_PROBLEM_TYPE'
+  | 'DUPLICATE_PROBLEM_TYPE'
   | 'INTERNAL_ERROR'
   | (string & {});
 
@@ -227,6 +232,8 @@ export interface SpaceDto {
   effectiveVisibility: Visibility;
   depth: number;
   version: number;
+  /** Active assets attached directly to this space (not descendants) that the caller may see. */
+  assetCount: number;
 }
 
 export interface CreateSpaceRequest {
@@ -355,3 +362,110 @@ export interface AcceptInvitationResponse {
   buildingId: UUID;
   membership: MembershipSummary;
 }
+
+// ---------- assets & problem catalog ----------
+
+/** Built-in asset types. Reference data on the server, so unknown codes must be tolerated. */
+export type AssetTypeCode =
+  | 'LIGHT'
+  | 'ELEVATOR'
+  | 'DOOR'
+  | 'GATE'
+  | 'INTERCOM'
+  | 'BOILER'
+  | 'PLUMBING'
+  | 'WINDOW'
+  | 'FIRE_SAFETY'
+  | 'OTHER'
+  | (string & {});
+
+export interface ProblemTypeDto {
+  id: UUID;
+  assetType: AssetTypeCode;
+  label: string;
+  sortOrder: number;
+  /** Global catalog entry (can be hidden per building, not renamed). */
+  builtIn: boolean;
+  /** False = hidden (built-in) or deactivated (custom) in this building. Reporting UIs show only active ones. */
+  active: boolean;
+}
+
+export interface AssetTypeDto {
+  code: AssetTypeCode;
+  name: string;
+  /** Short icon key: bulb, elevator, door, gate, intercom, boiler, plumbing, window, fire, tool. Clients map it to a glyph. */
+  icon: string;
+  sortOrder: number;
+  /** Ordered by sortOrder, then label. Reporting UIs append their own "Other…" choice. */
+  problemTypes: ProblemTypeDto[];
+}
+
+export interface CreateProblemTypeRequest {
+  assetType: AssetTypeCode;
+  label: string;
+  sortOrder?: number;
+}
+
+/** Built-ins: only `active` may change (409 BUILT_IN_PROBLEM_TYPE otherwise). Custom: all fields. */
+export interface UpdateProblemTypeRequest {
+  label: string;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface AssetDto {
+  /** Stable forever — phase 5 QR codes encode it. */
+  id: UUID;
+  buildingId: UUID;
+  /** Null only for archived assets whose space was later deleted. */
+  spaceId: UUID | null;
+  spaceName: string | null;
+  /** Human path below the building root, e.g. "Floor 2 › 2B › Kitchen". */
+  spacePath: string | null;
+  type: AssetTypeCode;
+  typeName: string;
+  name: string;
+  notes: string | null;
+  /** Visibility of the asset's space after inheritance (null if the space is gone). */
+  effectiveVisibility: Visibility | null;
+  archived: boolean;
+  archivedAt: Instant | null;
+  createdAt: Instant;
+  version: number;
+}
+
+export interface CreateAssetRequest {
+  spaceId: UUID;
+  type: AssetTypeCode;
+  name: string;
+  notes?: string | null;
+}
+
+/** Full replace. Moving = changing spaceId. Archived assets must be restored first (409 ASSET_ARCHIVED). */
+export interface UpdateAssetRequest {
+  spaceId: UUID;
+  type: AssetTypeCode;
+  name: string;
+  notes: string | null;
+  version?: number;
+}
+
+/** "Add a Stairwell light to every floor": same type/name in several spaces at once (1..500). */
+export interface BulkCreateAssetsRequest {
+  type: AssetTypeCode;
+  name: string;
+  spaceIds: UUID[];
+  notes?: string | null;
+}
+
+export interface AssetQuery {
+  /** Limit to this space… */
+  spaceId?: UUID;
+  /** …and everything below it (default true when spaceId is set). */
+  includeDescendants?: boolean;
+  type?: AssetTypeCode;
+  /** Case-insensitive match on asset name. */
+  q?: string;
+  includeArchived?: boolean;
+}
+

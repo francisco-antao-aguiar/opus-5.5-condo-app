@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Text } from 'react-native';
-import { SPACE_TYPE_LABELS, type CreateSpaceRequest, type SpaceNode, type SpaceType, type UUID, type Visibility } from '@condo/shared';
+import { ApiError, SPACE_TYPE_LABELS, type CreateSpaceRequest, type SpaceNode, type SpaceType, type UUID, type Visibility } from '@condo/shared';
 import { toUpdateRequest, useCreateSpace, useDeleteSpace, useUpdateSpace } from '../../hooks/queries';
 import { confirm } from '../../lib/confirm';
 import { errorMessage, fieldError } from '../../lib/errors';
@@ -115,10 +115,13 @@ export function EditSpaceSheet({
   buildingId,
   node,
   onClose,
+  onShowAssets,
 }: {
   buildingId: UUID;
   node: SpaceNode | null;
   onClose: () => void;
+  /** Open the space so its assets can be moved or archived (after 409 SPACE_HAS_ASSETS). */
+  onShowAssets?: (spaceId: UUID) => void;
 }) {
   const update = useUpdateSpace(buildingId);
   const remove = useDeleteSpace(buildingId);
@@ -168,11 +171,29 @@ export function EditSpaceSheet({
   }
 
   const error = update.error ?? remove.error;
+  const hasAssets = remove.error instanceof ApiError && remove.error.problem.code === 'SPACE_HAS_ASSETS';
+  const directAssets = current.assetCount ?? 0;
   const dirty = name.trim() !== current.name || visibility !== current.visibility;
 
   return (
     <Sheet visible title={'Edit ' + current.name} onClose={onClose}>
-      <FormError message={error ? errorMessage(error) : null} />
+      <FormError
+        message={
+          hasAssets
+            ? `${current.name} can't be deleted while it (or a space inside it) still has assets. ` +
+              'Assets keep their issue history and QR labels, so move them to another space or archive them first.'
+            : error
+              ? errorMessage(error)
+              : null
+        }
+      />
+      {hasAssets && onShowAssets ? (
+        <Button
+          title={directAssets ? `Show the ${directAssets} ${directAssets === 1 ? 'asset' : 'assets'} here` : "Show what's inside"}
+          variant="secondary"
+          onPress={() => onShowAssets(current.id)}
+        />
+      ) : null}
       <TextField
         label="Name"
         value={name}

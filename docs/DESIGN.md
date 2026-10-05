@@ -47,13 +47,10 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 | **Membership** | id, building, user, role, unitSpace?, status, expiresAt? | One per (building, user). `expiresAt` is the *membership* expiry; checked at every authorization. |
 | **Space** | id, buildingId, parentId, type, name, sortOrder, visibility?, path, depth | Generic tree node. |
 
-### Phases 3–5 (planned — fields reserved, not yet created)
+### Phases 4–5 (planned — fields reserved, not yet created)
 
 | Entity | Key fields |
 |---|---|
-| **AssetType** (P3) | code PK (LIGHT, ELEVATOR, DOOR, GATE, INTERCOM, BOILER…), name, icon, builtIn |
-| **ProblemType** (P3) | id, assetTypeCode, buildingId? (null = global catalog), code, label, sortOrder, active |
-| **Asset** (P3) | id (also the QR id), buildingId, spaceId, assetTypeCode, name, createdAt |
 | **Issue** (P4) | id, buildingId, assetId, spaceId (denormalized), problemTypeId?, otherText?, otherTextNormalized?, note, status, visibility (snapshot of effective visibility), sharedWithAdmins, reporterMembershipId, mergedIntoId?, affectedCount, createdAt, statusChangedAt |
 | **IssueAffected** (P4) | issueId, userId, createdAt — "me too" + subscription |
 | **IssueEvent** (P4) | id, issueId, actorUserId, type (STATUS_CHANGE, COMMENT, ME_TOO, MERGE), fromStatus, toStatus, comment, createdAt |
@@ -75,6 +72,23 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 * **Membership end**: an invitation carries a fixed `membershipExpiresAt` *or* a `membershipDurationDays` resolved at accept time (accepted at T → expires T + N days), never both (DB check constraint).
 * **Expiry**: access ends exactly at `expiresAt` because `PermissionService` checks it on every call. A scheduled job (`app.memberships.expiry-cron`, default every 15 min) also flips such rows to `EXPIRED` so lists and reports agree. Setting a new future expiry on an expired member reactivates them.
 * **Concurrency**: Space, Member and Building DTOs expose `version`; updates may send it back and get `409 CONFLICT` when stale.
+
+### Phase 3 (implemented)
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| **AssetType** | code PK, name, icon, sortOrder | Reference data like roles: LIGHT, ELEVATOR, DOOR, GATE, INTERCOM, BOILER, PLUMBING, WINDOW, FIRE_SAFETY, OTHER. |
+| **ProblemType** | id, assetTypeCode, buildingId? (null = built-in), label, sortOrder, active | Built-ins have fixed UUIDs (stable across environments, referenced by phase 4 issues). Custom ones belong to one building. |
+| **ProblemTypeHidden** | (buildingId, problemTypeId) | A building hides a built-in that doesn't apply, without touching the global catalog. |
+| **Asset** | id (stable, QR target), buildingId, spaceId?, assetTypeCode, name, notes?, archivedAt? | Attaches to any space. "Delete" = archive: the id, issue history and printed QR labels survive. |
+
+* **Archive, don't delete.** `DELETE /assets/{id}` sets `archivedAt`; `POST …/restore` undoes it. A space whose subtree still has *active* assets can't be deleted (409 `SPACE_HAS_ASSETS`); archived assets don't block it and keep their history with `spaceId = null` (FK `ON DELETE SET NULL`, plus a check that only archived assets may lack a space).
+* **Private assets are private.** An asset in a PRIVATE space is listed only to members whose unit contains it and to members allowed to edit assets or triage issues there (`can(ASSET_EDIT|ISSUE_TRIAGE, space)`). So the reporting flow never shows you a neighbour's boiler. Same rule will apply to private issues in phase 4.
+* **Permissions** (policy rows, no new code path): `ASSET_CREATE` on the target space, `ASSET_EDIT` on the current *and* new space when moving, `ASSET_DELETE` to archive/restore, `CATALOG_EDIT` for the building catalog. **Policy change (data only):** Managed mode now also grants OWNER `ASSET_CREATE/EDIT/DELETE` scoped to `OWN_UNIT`, so owners can register the boiler in their own flat; building structure stays admin-only.
+* **Catalog rules:** built-ins can be hidden per building but not renamed (409 `BUILT_IN_PROBLEM_TYPE`); labels are unique per asset type within a building, case-insensitively, including built-ins (409 `DUPLICATE_PROBLEM_TYPE`). Custom entries are deactivated, never deleted (phase 4 issues reference them). The reporting UI's "Other…" choice is client-side; promoting frequent "Other" texts into custom entries is a phase 4 admin view on top of `POST /catalog/problem-types`.
+* **Bulk add**: one type + name across up to 500 spaces in one call ("Stairwell light" on every floor).
+* **Archived assets without a space** (their space was deleted later) are visible only to members with building-wide `ASSET_DELETE`; restoring one returns 409 since it has nowhere to go.
+* **Phase 5 note:** QR deep links carry only the asset id, so phase 5 adds a building-less `GET /assets/{id}` resolver that answers with the building (or `NOT_A_MEMBER`).
 
 ### Phase 6 compatibility (design only)
 
@@ -165,6 +179,21 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 | GET | `/invitations/{code}` | public, rate-limited — preview |
 | POST | `/invitations/{code}/accept` | authenticated |
 
+### Phase 3 endpoints
+
+| Method | Path | Auth / action |
+|---|---|---|
+| GET | `/buildings/{b}/catalog?includeInactive=` | `BUILDING_VIEW` (inactive entries need `CATALOG_EDIT`) |
+| POST | `/buildings/{b}/catalog/problem-types` | `CATALOG_EDIT` |
+| PUT | `/buildings/{b}/catalog/problem-types/{id}` | `CATALOG_EDIT` (built-ins: hide/show only) |
+| GET | `/buildings/{b}/assets?spaceId=&includeDescendants=&type=&q=&includeArchived=` | `BUILDING_VIEW`, filtered by private-space rule |
+| GET | `/buildings/{b}/assets/{id}` | `BUILDING_VIEW` + private-space rule |
+| POST | `/buildings/{b}/assets` | `ASSET_CREATE` on the space |
+| POST | `/buildings/{b}/assets/bulk` | `ASSET_CREATE` on every space |
+| PUT | `/buildings/{b}/assets/{id}` | `ASSET_EDIT` on old and new space |
+| DELETE | `/buildings/{b}/assets/{id}` | `ASSET_DELETE` (archive) |
+| POST | `/buildings/{b}/assets/{id}/restore` | `ASSET_DELETE` |
+
 ## 4. Assumptions
 
 1. **One membership per user per building**, with at most one unit. An owner of two units (flat + garage box) would need a `membership_unit` join table — easy to add, but it changes the `OWN_UNIT` check to "any of my units".
@@ -176,3 +205,6 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 7. Access tokens: 15 min JWT (HS256). Refresh tokens: 30 days, opaque, rotated.
 8. **Owners may invite co-owners** into their own unit (same rank), not just tenants. *(Confirmed.)*
 9. **Membership end** is either a fixed date chosen when inviting (end of lease) or a duration counted from acceptance (e.g. 7 days for a guest; 7 is the UI preset), never both. No end date is the default. *(Confirmed.)*
+10. **Asset types are global reference data** (like roles); buildings customise the *problem* catalog, not the list of asset types. A building-specific asset type would be a nullable `building_id` on `asset_type`, mirroring `problem_type`.
+11. **Managed-mode owners manage assets in their own unit** (data-only policy change, see Phase 3).
+

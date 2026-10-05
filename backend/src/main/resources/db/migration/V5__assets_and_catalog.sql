@@ -1,0 +1,121 @@
+-- Phase 3: asset types, problem catalog, assets.
+
+CREATE TABLE asset_type (
+    code        VARCHAR(32) PRIMARY KEY,
+    name        VARCHAR(64) NOT NULL,
+    icon        VARCHAR(32) NOT NULL,
+    sort_order  INT NOT NULL
+);
+
+-- building_id NULL = built-in catalog entry shared by all buildings.
+CREATE TABLE problem_type (
+    id               UUID PRIMARY KEY,
+    version          BIGINT NOT NULL DEFAULT 0,
+    asset_type_code  VARCHAR(32) NOT NULL REFERENCES asset_type (code),
+    building_id      UUID REFERENCES building (id) ON DELETE CASCADE,
+    label            VARCHAR(120) NOT NULL,
+    sort_order       INT NOT NULL DEFAULT 0,
+    active           BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at       TIMESTAMP WITH TIME ZONE NOT NULL
+);
+CREATE INDEX ix_problem_type_type_building ON problem_type (asset_type_code, building_id);
+
+-- A building hides a built-in entry without touching the global catalog.
+CREATE TABLE problem_type_hidden (
+    building_id      UUID NOT NULL REFERENCES building (id) ON DELETE CASCADE,
+    problem_type_id  UUID NOT NULL REFERENCES problem_type (id) ON DELETE CASCADE,
+    PRIMARY KEY (building_id, problem_type_id)
+);
+
+CREATE TABLE asset (
+    id               UUID PRIMARY KEY,
+    version          BIGINT NOT NULL DEFAULT 0,
+    building_id      UUID NOT NULL REFERENCES building (id) ON DELETE CASCADE,
+    -- Archived assets outlive their space (issue history, printed QR labels).
+    space_id         UUID REFERENCES space (id) ON DELETE SET NULL,
+    asset_type_code  VARCHAR(32) NOT NULL REFERENCES asset_type (code),
+    name             VARCHAR(120) NOT NULL,
+    notes            VARCHAR(500),
+    archived_at      TIMESTAMP WITH TIME ZONE,
+    created_at       TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at       TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT ck_asset_active_has_space CHECK (archived_at IS NOT NULL OR space_id IS NOT NULL)
+);
+CREATE INDEX ix_asset_building ON asset (building_id);
+CREATE INDEX ix_asset_space ON asset (space_id);
+
+INSERT INTO asset_type (code, name, icon, sort_order) VALUES
+    ('LIGHT',       'Light',        'bulb',     1),
+    ('ELEVATOR',    'Elevator',     'elevator', 2),
+    ('DOOR',        'Door',         'door',     3),
+    ('GATE',        'Gate',         'gate',     4),
+    ('INTERCOM',    'Intercom',     'intercom', 5),
+    ('BOILER',      'Boiler',       'boiler',   6),
+    ('PLUMBING',    'Plumbing',     'plumbing', 7),
+    ('WINDOW',      'Window',       'window',   8),
+    ('FIRE_SAFETY', 'Fire safety',  'fire',     9),
+    ('OTHER',       'Other',        'tool',     99);
+
+-- Built-in catalog. Fixed ids (…-00TT-0000000000NN: TT = type, NN = entry) so they're identical in every
+-- environment and safe for issues to reference.
+INSERT INTO problem_type (id, asset_type_code, building_id, label, sort_order, active, created_at, updated_at) VALUES
+    ('00000000-0000-0000-0001-000000000001', 'LIGHT', NULL, 'Not working', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0001-000000000002', 'LIGHT', NULL, 'Flickering', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0001-000000000003', 'LIGHT', NULL, 'Always on', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0001-000000000004', 'LIGHT', NULL, 'Damaged fixture', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0002-000000000001', 'ELEVATOR', NULL, 'Stuck', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0002-000000000002', 'ELEVATOR', NULL, 'Not coming', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0002-000000000003', 'ELEVATOR', NULL, 'Door won''t close', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0002-000000000004', 'ELEVATOR', NULL, 'Noisy', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0002-000000000005', 'ELEVATOR', NULL, 'Buttons not working', 5, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0003-000000000001', 'DOOR', NULL, 'Won''t lock', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0003-000000000002', 'DOOR', NULL, 'Won''t open', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0003-000000000003', 'DOOR', NULL, 'Won''t close properly', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0003-000000000004', 'DOOR', NULL, 'Damaged', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0004-000000000001', 'GATE', NULL, 'Won''t open', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0004-000000000002', 'GATE', NULL, 'Won''t lock', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0004-000000000003', 'GATE', NULL, 'Won''t close', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0004-000000000004', 'GATE', NULL, 'Damaged', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0005-000000000001', 'INTERCOM', NULL, 'No sound', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0005-000000000002', 'INTERCOM', NULL, 'Doesn''t open the door', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0005-000000000003', 'INTERCOM', NULL, 'Doesn''t ring', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0005-000000000004', 'INTERCOM', NULL, 'Damaged', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0006-000000000001', 'BOILER', NULL, 'No hot water', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0006-000000000002', 'BOILER', NULL, 'No heating', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0006-000000000003', 'BOILER', NULL, 'Leaking', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0006-000000000004', 'BOILER', NULL, 'Error code', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0006-000000000005', 'BOILER', NULL, 'Strange noise', 5, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0007-000000000001', 'PLUMBING', NULL, 'Leak', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0007-000000000002', 'PLUMBING', NULL, 'Clogged drain', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0007-000000000003', 'PLUMBING', NULL, 'No water', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0007-000000000004', 'PLUMBING', NULL, 'Low pressure', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0007-000000000005', 'PLUMBING', NULL, 'Bad smell', 5, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0008-000000000001', 'WINDOW', NULL, 'Broken glass', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0008-000000000002', 'WINDOW', NULL, 'Won''t close', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0008-000000000003', 'WINDOW', NULL, 'Won''t open', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0008-000000000004', 'WINDOW', NULL, 'Draft or leak', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0009-000000000001', 'FIRE_SAFETY', NULL, 'Alarm beeping', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0009-000000000002', 'FIRE_SAFETY', NULL, 'Extinguisher missing', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0009-000000000003', 'FIRE_SAFETY', NULL, 'Extinguisher expired', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0009-000000000004', 'FIRE_SAFETY', NULL, 'Emergency light off', 4, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0009-000000000005', 'FIRE_SAFETY', NULL, 'Exit blocked', 5, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+    ('00000000-0000-0000-0099-000000000001', 'OTHER', NULL, 'Not working', 1, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0099-000000000002', 'OTHER', NULL, 'Damaged', 2, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0099-000000000003', 'OTHER', NULL, 'Needs cleaning', 3, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- Policy change, data only: in Managed buildings owners may manage assets inside their own unit
+-- (e.g. register their boiler). Building structure stays admin/manager-only.
+INSERT INTO permission_policy (governance_mode, action, role_code, scope) VALUES
+    ('MANAGED', 'ASSET_CREATE', 'OWNER', 'OWN_UNIT'),
+    ('MANAGED', 'ASSET_EDIT',   'OWNER', 'OWN_UNIT'),
+    ('MANAGED', 'ASSET_DELETE', 'OWNER', 'OWN_UNIT');

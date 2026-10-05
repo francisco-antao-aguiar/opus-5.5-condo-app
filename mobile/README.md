@@ -51,6 +51,7 @@ src/app/                       routes (Expo Router)
   (app)/buildings/[buildingId]/spaces/[spaceId] one level of the drill-down browser
   (app)/buildings/[buildingId]/members          members (end date / revoke / restore) + invitations
   (app)/buildings/[buildingId]/invite           create an invitation, then share its code
+  (app)/buildings/[buildingId]/assets/[assetId] asset detail: problems you can report, edit / move / archive
   join/index                   "Join with a code" (outside the auth guards: works signed in or out)
   join/[code]                  invitation landing: preview, then accept / sign in / create account
 src/api/                       shared client, token store (secure-store / localStorage on web), query client, query keys

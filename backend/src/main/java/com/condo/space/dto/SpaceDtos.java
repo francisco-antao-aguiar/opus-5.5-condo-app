@@ -17,7 +17,7 @@ public final class SpaceDtos {
     }
 
     public record SpaceDto(UUID id, UUID buildingId, UUID parentId, SpaceType type, String name, int sortOrder,
-            Visibility visibility, Visibility effectiveVisibility, int depth, long version) {
+            Visibility visibility, Visibility effectiveVisibility, int depth, long version, long assetCount) {
     }
 
     public record CreateSpaceRequest(

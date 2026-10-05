@@ -58,6 +58,9 @@ const FRIENDLY: Partial<Record<string, string>> = {
   INVITATION_EXHAUSTED: 'This invitation has already been used.',
   ALREADY_MEMBER: "You're already a member of this building.",
   TOO_MANY_ATTEMPTS: 'Too many attempts. Wait a few minutes and try again.',
+  SPACE_HAS_ASSETS: 'This space still has assets (lights, doors…) inside it. Move or archive them first.',
+  ASSET_ARCHIVED: 'This asset is archived. Restore it before editing.',
+  UNKNOWN_ASSET_TYPE: "That asset type doesn't exist any more. Pick another one.",
 };
 
 /** 409 from an update that carried a stale `version`. */

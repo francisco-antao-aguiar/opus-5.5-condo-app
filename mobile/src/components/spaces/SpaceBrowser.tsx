@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, Stack } from 'expo-router';
 import {
   buildSpaceTree,
   canDo,
   spacePath,
   SPACE_TYPE_LABELS,
+  type AssetDto,
+  type AssetTypeDto,
   type BuildingDto,
   type MyPermissions,
   type SpaceDto,
   type SpaceNode,
   type UUID,
 } from '@condo/shared';
-import { useBuilding, useGovernanceModes, useLeaveBuilding, useMyPermissions, useSpaces } from '../../hooks/queries';
+import { useAssets, useBuilding, useCatalog, useGovernanceModes, useLeaveBuilding, useMyPermissions, useSpaces } from '../../hooks/queries';
 import { confirm } from '../../lib/confirm';
 import { errorMessage } from '../../lib/errors';
 import { canInvite } from '../../lib/memberPermissions';
@@ -20,7 +22,9 @@ import { roleLabel } from '../../lib/format';
 import { radius, spacing, useTheme } from '../../theme';
 import { RoleBadge, SpaceTypeIcon, VisibilityBadge } from '../Badges';
 import { Button } from '../Button';
-import { Card, FormError } from '../Layout';
+import { Card, FormError, SectionTitle } from '../Layout';
+import { AddAssetSheet } from '../assets/AddAssetSheet';
+import { AssetRow } from '../assets/AssetParts';
 import { IconButton, ListRow } from '../ListRow';
 import { EmptyView, QueryGate, StateView } from '../StateView';
 import { AddSpaceSheet, EditSpaceSheet } from './SpaceSheets';
@@ -33,6 +37,7 @@ interface Props {
 
 const buildingHref = (b: UUID) => `/buildings/${b}` as const;
 const spaceHref = (b: UUID, s: UUID) => `/buildings/${b}/spaces/${s}` as const;
+const assetHref = (b: UUID, a: UUID) => `/buildings/${b}/assets/${a}` as const;
 
 export function SpaceBrowser({ buildingId, spaceId }: Props) {
   const buildingQuery = useBuilding(buildingId);
@@ -94,11 +99,22 @@ function SpaceBrowserContent({
   const editing = editingId ? (nodes.get(editingId) ?? null) : null;
   const path = useMemo(() => spacePath(spaces, spaceId), [spaces, spaceId]);
   const canEditHere = canDo(perms, 'STRUCTURE_EDIT', spaceId, spaces);
+  const canAddAsset = canDo(perms, 'ASSET_CREATE', spaceId, spaces);
+  const [addingAsset, setAddingAsset] = useState(false);
+  const assetsQuery = useAssets(building.id);
+  const catalogQuery = useCatalog(building.id);
+  const assetsHere = useMemo(
+    () =>
+      (assetsQuery.data ?? [])
+        .filter((a) => a.spaceId === spaceId && !a.archived)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+    [assetsQuery.data, spaceId],
+  );
 
   async function onRefresh() {
     setRefreshing(true);
     try {
-      await refetch();
+      await Promise.all([refetch(), assetsQuery.refetch()]);
     } finally {
       setRefreshing(false);
     }
@@ -147,21 +163,43 @@ function SpaceBrowserContent({
                 </View>
               </View>
             ) : null}
+            <AssetsHere
+              assets={assetsHere}
+              catalog={catalogQuery.data}
+              loading={assetsQuery.isPending && assetsQuery.fetchStatus !== 'idle'}
+              error={assetsQuery.error}
+              canAdd={canAddAsset}
+              placeName={isRootScreen ? building.name : current.name}
+              onAdd={() => setAddingAsset(true)}
+              onOpen={(a) => router.push(assetHref(building.id, a.id))}
+            />
+            {current.children.length > 0 && (assetsHere.length > 0 || canAddAsset) ? (
+              <SectionTitle>Places</SectionTitle>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
-          <EmptyView
-            title="Nothing inside yet"
-            message={canEditHere ? 'Add floors, units, rooms or common areas.' : undefined}
-          />
+          assetsHere.length === 0 && !canAddAsset ? (
+            <EmptyView
+              title="Nothing inside yet"
+              message={canEditHere ? 'Add floors, units, rooms or common areas.' : undefined}
+            />
+          ) : null
         }
         renderItem={({ item }) => {
           const count = item.children.length;
+          const assetCount = item.assetCount ?? 0;
           const canEditChild = canDo(perms, 'STRUCTURE_EDIT', item.id, spaces);
           return (
             <ListRow
               title={item.name}
-              subtitle={SPACE_TYPE_LABELS[item.type] + (count ? ' · ' + count + (count === 1 ? ' item' : ' items') : '')}
+              subtitle={[
+                SPACE_TYPE_LABELS[item.type],
+                count ? count + (count === 1 ? ' place' : ' places') : null,
+                assetCount ? assetCount + (assetCount === 1 ? ' asset' : ' assets') : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               leading={<SpaceTypeIcon type={item.type} />}
               badges={<VisibilityBadge space={item} />}
               onPress={() => router.push(spaceHref(building.id, item.id))}
@@ -196,7 +234,55 @@ function SpaceBrowserContent({
         buildingId={building.id}
         node={editing}
         onClose={() => setEditingId(null)}
+        onShowAssets={(id) => {
+          setEditingId(null);
+          if (id !== spaceId) router.push(spaceHref(building.id, id));
+        }}
       />
+      <AddAssetSheet
+        visible={addingAsset}
+        buildingId={building.id}
+        space={current}
+        onClose={() => setAddingAsset(false)}
+      />
+    </View>
+  );
+}
+
+/** Assets attached directly to the current space: what you'd report a problem about. */
+function AssetsHere({
+  assets,
+  catalog,
+  loading,
+  error,
+  canAdd,
+  placeName,
+  onAdd,
+  onOpen,
+}: {
+  assets: AssetDto[];
+  catalog?: AssetTypeDto[];
+  loading: boolean;
+  error: unknown;
+  canAdd: boolean;
+  placeName: string;
+  onAdd: () => void;
+  onOpen: (a: AssetDto) => void;
+}) {
+  const { colors } = useTheme();
+  if (!assets.length && !canAdd && !loading && !error) return null;
+  return (
+    <View style={styles.assets}>
+      <SectionTitle>{'In ' + placeName}</SectionTitle>
+      {loading ? <ActivityIndicator color={colors.primary} /> : null}
+      {error ? <FormError message={"Couldn't load assets. Pull to refresh."} /> : null}
+      {assets.map((a) => (
+        <AssetRow key={a.id} asset={a} catalog={catalog} onPress={() => onOpen(a)} />
+      ))}
+      {!loading && !error && assets.length === 0 ? (
+        <Text style={{ color: colors.textMuted, fontSize: 15 }}>No lights, doors or other assets here yet.</Text>
+      ) : null}
+      {canAdd ? <Button title="+ Add asset" variant="secondary" onPress={onAdd} /> : null}
     </View>
   );
 }
@@ -294,4 +380,5 @@ const styles = StyleSheet.create({
   currentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   currentType: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
   footer: { marginTop: spacing.lg },
+  assets: { gap: spacing.sm },
 });

@@ -25,6 +25,11 @@ const FRIENDLY: Record<string, string> = {
   ALREADY_MEMBER: "You're already a member of this building.",
   TOO_MANY_ATTEMPTS: 'Too many attempts. Please wait a few minutes.',
   INVALID_UNIT: 'Pick a unit (a space of type Unit).',
+  UNKNOWN_ASSET_TYPE: "That asset type doesn't exist.",
+  SPACE_HAS_ASSETS: 'This space still has active assets. Archive or move them first.',
+  ASSET_ARCHIVED: 'This asset is archived. Restore it before editing.',
+  BUILT_IN_PROBLEM_TYPE: 'Built-in problems can only be hidden or shown, not renamed or re-sorted.',
+  DUPLICATE_PROBLEM_TYPE: 'That problem already exists for this asset type.',
 };
 
 /** Shown after a 409 CONFLICT, once the page has refetched the latest data. */

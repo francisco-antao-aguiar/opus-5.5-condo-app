@@ -14,6 +14,7 @@ function space(id: string, parentId: string | null, type: SpaceType, name = id, 
     effectiveVisibility: 'COMMON',
     depth: 0,
     version: 0,
+    assetCount: 0,
   };
 }
 

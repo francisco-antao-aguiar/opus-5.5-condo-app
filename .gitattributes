@@ -1,0 +1,5 @@
+# Keep LF everywhere (Java, TS, SQL, shell). Windows checkouts otherwise get CRLF via core.autocrlf.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.jpg binary

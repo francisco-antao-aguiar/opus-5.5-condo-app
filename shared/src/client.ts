@@ -1,6 +1,15 @@
 import type {
   AcceptInvitationResponse,
   ApiProblem,
+  AssetDto,
+  AssetQuery,
+  AssetTypeDto,
+  BulkCreateAssetsRequest,
+  CreateAssetRequest,
+  CreateProblemTypeRequest,
+  ProblemTypeDto,
+  UpdateAssetRequest,
+  UpdateProblemTypeRequest,
   AuthTokens,
   BuildingDto,
   CreateBuildingRequest,
@@ -34,6 +43,13 @@ export function normalizeInviteCode(input: string): string {
 export function formatInviteCode(code: string): string {
   const c = normalizeInviteCode(code);
   return c.length === 8 ? `${c.slice(0, 4)}-${c.slice(4)}` : c;
+}
+
+function toQueryString(params: object): string {
+  const parts = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  return parts.length ? `?${parts.join('&')}` : '';
 }
 
 /** Where the client keeps tokens. Web: localStorage; mobile: expo-secure-store. */
@@ -216,6 +232,33 @@ export function createApiClient(config: ApiClientConfig) {
         request<MemberDto>('PUT', `${b(buildingId)}/members/${memberId}`, req),
       revoke: (buildingId: UUID, memberId: UUID) =>
         request<void>('DELETE', `${b(buildingId)}/members/${memberId}`),
+    },
+
+    catalog: {
+      /** Asset types with this building's problem catalog. includeInactive shows hidden/deactivated entries (admin views). */
+      get: (buildingId: UUID, includeInactive = false) =>
+        request<AssetTypeDto[]>('GET', `${b(buildingId)}/catalog?includeInactive=${includeInactive}`),
+      createProblemType: (buildingId: UUID, req: CreateProblemTypeRequest) =>
+        request<ProblemTypeDto>('POST', `${b(buildingId)}/catalog/problem-types`, req),
+      updateProblemType: (buildingId: UUID, problemTypeId: UUID, req: UpdateProblemTypeRequest) =>
+        request<ProblemTypeDto>('PUT', `${b(buildingId)}/catalog/problem-types/${problemTypeId}`, req),
+    },
+
+    assets: {
+      list: (buildingId: UUID, query: AssetQuery = {}) =>
+        request<AssetDto[]>('GET', `${b(buildingId)}/assets${toQueryString(query)}`),
+      get: (buildingId: UUID, assetId: UUID) => request<AssetDto>('GET', `${b(buildingId)}/assets/${assetId}`),
+      create: (buildingId: UUID, req: CreateAssetRequest) =>
+        request<AssetDto>('POST', `${b(buildingId)}/assets`, req),
+      bulkCreate: (buildingId: UUID, req: BulkCreateAssetsRequest) =>
+        request<AssetDto[]>('POST', `${b(buildingId)}/assets/bulk`, req),
+      update: (buildingId: UUID, assetId: UUID, req: UpdateAssetRequest) =>
+        request<AssetDto>('PUT', `${b(buildingId)}/assets/${assetId}`, req),
+      /** Soft delete: keeps the id (QR labels, issue history). */
+      archive: (buildingId: UUID, assetId: UUID) =>
+        request<void>('DELETE', `${b(buildingId)}/assets/${assetId}`),
+      restore: (buildingId: UUID, assetId: UUID) =>
+        request<AssetDto>('POST', `${b(buildingId)}/assets/${assetId}/restore`),
     },
 
     invitations: {
