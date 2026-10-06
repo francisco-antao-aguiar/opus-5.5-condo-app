@@ -13,6 +13,8 @@ phase 1–5 model and to list the few, all additive, changes that model needs.
 | 3 | Announcements | **Dropped** from scope. Nothing below depends on them |
 | 4 | Costs: tracking or per-unit splitting? | **Tracking only** — no quota (*permilagem*) splitting or per-unit statements — §4 |
 | 5 | Currency and time zone | **EUR by default, future-proof**: every amount carries its own ISO 4217 currency, nothing assumes EUR — §4. Time zone defaults to Europe/Lisbon, editable per building |
+| 6 | Remind admins about booking requests waiting for review? | **Yes**, after 48 hours (configurable) — §3 |
+| 7 | Can owners see costs in Managed buildings? | **Yes**: `COST_VIEW` for OWNER stays in the Managed preset — §5 |
 
 ---
 
@@ -153,6 +155,7 @@ booking(
   note VARCHAR?,                             -- requester's note ("birthday, ~20 people")
   decision_note VARCHAR?,                    -- admin's reason, shown to the requester on rejection
   decided_by?, decided_at?, cancelled_by?, cancelled_at?,
+  reminded_at?,                              -- when admins were reminded about a long-pending request
   created_at)
 ```
 There is no `requires_approval` switch: approval is always required. Payment fields are deliberately absent;
@@ -164,8 +167,10 @@ touching `booking`.
    so the admin never has to choose between two people for the same evening.
 2. An admin (`BOOKING_MANAGE`) **approves** → CONFIRMED, or **rejects** with an optional reason → REJECTED (slot
    freed).
-3. Pending requests not decided before their start time expire automatically (job) → REJECTED with reason
-   "Not reviewed in time", and the admins' queue shows how old each request is.
+3. A request still PENDING after **48 hours** (`app.bookings.review-reminder-after`) triggers one
+   `BOOKING_REVIEW_REMINDER` to the admins (once per request, tracked by `booking.reminded_at`). Requests not
+   decided before their start time expire automatically (job) → REJECTED with reason "Not reviewed in time".
+   The admins' queue shows how old each request is.
 4. The requester can withdraw a PENDING request anytime and cancel a CONFIRMED one until `cancel_cutoff_hours`;
    admins can cancel anything, with a reason.
 
@@ -182,7 +187,7 @@ touching `booking`.
   bookings and offers "cancel and notify all".
 
 ### Notifications
-`BOOKING_REQUESTED` → members with `BOOKING_MANAGE`; `BOOKING_CONFIRMED` / `BOOKING_REJECTED` (with the reason) /
+`BOOKING_REQUESTED` and, after 48 h still pending, `BOOKING_REVIEW_REMINDER` → members with `BOOKING_MANAGE`; `BOOKING_CONFIRMED` / `BOOKING_REJECTED` (with the reason) /
 `BOOKING_CANCELLED` → the requester; optional reminder 24 h before a confirmed booking (job).
 
 ### API
@@ -276,8 +281,8 @@ Same model as phases 1–5: new `Action` constants, rows per preset, one `Permis
 | `COST_MANAGE` | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
 
 `BOOKING_MANAGE` stays with admins and managers in both presets, matching "an admin reviews every request".
-Owners seeing costs in Managed mode reflects that owners pay for the building; tenants don't by default — one
-row to change if a building disagrees.
+Owners see costs in Managed mode *(decided)*: they pay for the building. Tenants don't by default — one row to
+change if a building disagrees.
 
 ---
 
@@ -298,10 +303,6 @@ All additive; existing rows get defaults (`issue.kind = 'REPORTED'`). No backfil
 2. **Costs** — anchors on issues and plans, which then exist; introduces `Money`.
 3. **Booking** — most rules (time zones, opening hours, concurrency, approvals), least coupled to the rest.
 
-## 8. Remaining open points
+## 8. Open points
 
-These don't block the design; decide them when the feature is built.
-
-* **Pending requests that nobody reviews** expire at their start time (above). Should admins also get a reminder,
-  e.g. when a request has waited 48 hours?
-* **Cost visibility for owners** in Managed mode is on by default (§5). Confirm, or limit to admins and managers.
+None. All questions are decided (see the table at the top).
