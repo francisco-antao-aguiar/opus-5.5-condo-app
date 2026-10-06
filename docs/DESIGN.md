@@ -129,7 +129,7 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 * Push goes through `PushSender`: `ExpoPushSender` (batches of 100 to the Expo push API, deletes tokens rejected as `DeviceNotRegistered`) when `app.push.enabled=true`, otherwise a logging sender (dev default, tests). An Expo access token can be set via `APP_PUSH_ACCESS_TOKEN`.
 * Out of scope for now: per-user notification preferences and quiet hours (a `notification_preference` table keyed by user × type would slot in front of delivery).
 
-### Phase 6 (design only — see [PHASE-6-DESIGN.md](PHASE-6-DESIGN.md))
+### Phase 6 (implemented — design and rationale in [PHASE-6-DESIGN.md](PHASE-6-DESIGN.md))
 
 Decided on 2026-10-06: maintenance tasks are issues, every booking is reviewed by an admin (no payments), costs are tracked only (no per-unit splitting), EUR by default with currency stored per amount. **Announcements were dropped.**
 
@@ -137,7 +137,11 @@ Decided on 2026-10-06: maintenance tasks are issues, every booking is reviewed b
 * **Shared-space booking** → `booking_policy` (per space: hours, slots, limits) + `booking`; every request starts PENDING until an admin approves or rejects it; overlaps prevented under a row lock (pending requests hold their slot); expired members' bookings are cancelled.
 * **Cost tracking** → `cost_entry` with `amount NUMERIC(19,4)` + its own ISO 4217 `currency` (`Money` value type, no implicit conversion, totals grouped by currency), receipts via `StorageService`, anchored to issues, plans, assets or spaces; privacy inherited from the anchor.
 * New actions `MAINTENANCE_*`, `BOOKING_*`, `COST_*` are policy rows as before.
-* **Blocker audit: none.** Additive changes only: `building.time_zone` and `currency`, `issue.kind`/`due_on` with a relaxed problem check, a generic notification API next to `IssueActivity`, extra space/asset deletion guards, and a job lock once the backend runs on several nodes.
+* Model changes, all additive (Flyway V8–V11): `building.time_zone` (default Europe/Lisbon) and `currency` (default EUR); `issue.kind`/`maintenance_plan_id`/`due_on`/`overdue_notified_at` with a relaxed problem check and a unique `(maintenance_plan_id, due_on)`; `maintenance_plan`, `cost_entry`, `booking_policy`, `booking`.
+* A generic `NotificationRequest` event next to `IssueActivity` carries task and booking notifications (`TASK_DUE`, `TASK_OVERDUE`, `BOOKING_REQUESTED`, `BOOKING_REVIEW_REMINDER`, `BOOKING_CONFIRMED`, `BOOKING_REJECTED`, `BOOKING_CANCELLED`) through the same store-then-push path.
+* Jobs: `MaintenanceJob` (hourly: generate due tasks, one transaction per plan; flag overdue tasks once) and `BookingJob` (every 10 min: 48 h review reminder, reject requests nobody reviewed before they start, cancel future bookings of members whose access ended). All idempotent; a distributed job lock is needed once the backend runs on several nodes.
+* Deletion guards: archiving an asset pauses its plans; deleting a space fails with `SPACE_HAS_PLANS` / `SPACE_HAS_BOOKINGS` while plans or upcoming bookings live in its subtree.
+* Known gaps: checklist ticks on a task aren't stored; calendar links can't be revoked individually (they expire after a year).
 
 ### Tree storage strategy — adjacency list + materialized path
 
@@ -176,6 +180,12 @@ A new mode (e.g. "anyone adds devices, only admins delete") = one `governance_mo
 | `CATALOG_EDIT` (custom problem types, promote "Other") | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
 | `MEMBER_INVITE` | ADMIN, MANAGER; OWNER *(own unit)* | ADMIN, MANAGER; OWNER *(own unit)* |
 | `MEMBER_MANAGE` (change role/unit/expiry, revoke) | ADMIN, MANAGER; OWNER *(own unit)* | ADMIN, MANAGER; OWNER *(own unit)* |
+| `MAINTENANCE_VIEW` | ADMIN, MANAGER, OWNER, TENANT | ADMIN, MANAGER, OWNER, TENANT |
+| `MAINTENANCE_MANAGE` (plans) | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
+| `BOOKING_CREATE` | ADMIN, MANAGER, OWNER, TENANT | ADMIN, MANAGER, OWNER, TENANT |
+| `BOOKING_MANAGE` (policies, approve/reject, cancel anyone's) | ADMIN, MANAGER | ADMIN, MANAGER |
+| `COST_VIEW` (list, summary, CSV) | ADMIN, MANAGER, OWNER | ADMIN, MANAGER, OWNER, TENANT |
+| `COST_MANAGE` | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
 
 Cross-cutting invariants enforced in the member service (not per-mode):
 * you cannot grant a role with a higher `rank` than your own, nor modify a member who outranks you;
@@ -266,6 +276,34 @@ All under `/api`. Errors are RFC 7807 `application/problem+json` with an extra `
 | POST | `/me/notifications/read-all` | authenticated |
 | POST | `/me/push-tokens` | authenticated — register/move a device token |
 | DELETE | `/me/push-tokens?token=` | authenticated — on logout |
+
+### Phase 6 endpoints
+
+Paths below are relative to `/api/buildings/{buildingId}` unless they start with `/me` or `/files`.
+
+| Method | Path | Auth / action |
+|---|---|---|
+| GET | `/maintenance-plans`, `/maintenance-plans/{id}` | `MAINTENANCE_VIEW` (+ privacy of the target) |
+| POST, PUT | `/maintenance-plans`, `/maintenance-plans/{id}` | `MAINTENANCE_MANAGE` on the target space; generates any task already due |
+| POST | `/maintenance-plans/{id}/pause`, `/resume` | `MAINTENANCE_MANAGE`; resuming schedules from today (no back-fill) |
+| POST | `/maintenance-plans/preview` | `MAINTENANCE_VIEW` — next dates + human-readable recurrence |
+| GET | `/issues?kind=REPORTED\|SCHEDULED` | as issues; the dashboard adds `overdue` and `dueThisWeek` |
+| GET | `/costs?from&to&category&assetId&issueId&maintenancePlanId&page&size` | `COST_VIEW` (+ privacy of the anchor) |
+| GET | `/costs/summary?groupBy=month\|category\|asset\|space&…filters` | `COST_VIEW` — totals per currency, never mixed |
+| GET | `/costs/export.csv?from&to` | `COST_VIEW` — UTF-8 with BOM, formula-injection-safe |
+| GET, POST, PUT | `/costs/{id}`, `/costs` | `COST_VIEW` / `COST_MANAGE` |
+| DELETE | `/costs/{id}?reason=` | `COST_MANAGE` — soft delete, reason 3–300 chars |
+| POST | `/costs/{id}/receipt` | `COST_MANAGE` — image or PDF, 10 MB |
+| GET | `/files/receipts/{costId}?exp&sig` | signed link (1 h) |
+| GET | `/bookable-spaces` | `BUILDING_VIEW` |
+| GET, PUT | `/spaces/{spaceId}/booking-policy` | `BUILDING_VIEW` / `BOOKING_MANAGE` (common spaces only) |
+| GET | `/spaces/{spaceId}/availability?from&to` | `BUILDING_VIEW` — busy slots, max 62 days |
+| GET | `/bookings?mine&spaceId&status&from&to`, `/bookings/{id}` | `BUILDING_VIEW` — names only on your own bookings or for managers |
+| POST | `/bookings` | `BOOKING_CREATE` — starts PENDING and holds the slot |
+| POST | `/bookings/{id}/approve`, `/reject` | `BOOKING_MANAGE` |
+| POST | `/bookings/{id}/cancel` | requester (pending anytime, confirmed until the cutoff) or `BOOKING_MANAGE` |
+| GET | `/me/bookings/calendar-link` | authenticated — signed iCalendar URL valid for a year |
+| GET | `/files/calendar/{userId}.ics?exp&sig` | signed link — your confirmed bookings |
 
 ## 4. Assumptions
 

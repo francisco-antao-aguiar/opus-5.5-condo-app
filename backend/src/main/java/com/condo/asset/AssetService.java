@@ -43,11 +43,12 @@ public class AssetService {
     private final PermissionService permissions;
     private final SpacePrivacy privacy;
     private final AppProperties props;
+    private final com.condo.maintenance.MaintenancePlanRepository plans;
     private final Clock clock;
 
     public AssetService(AssetRepository assets, AssetTypeRepository assetTypes, SpaceRepository spaces,
             CatalogService catalog, AccessGuard guard, PermissionService permissions, SpacePrivacy privacy,
-            AppProperties props, Clock clock) {
+            AppProperties props, com.condo.maintenance.MaintenancePlanRepository plans, Clock clock) {
         this.assets = assets;
         this.assetTypes = assetTypes;
         this.spaces = spaces;
@@ -56,6 +57,7 @@ public class AssetService {
         this.permissions = permissions;
         this.privacy = privacy;
         this.props = props;
+        this.plans = plans;
         this.clock = clock;
     }
 
@@ -175,6 +177,7 @@ public class AssetService {
         Asset asset = find(buildingId, assetId);
         guard.require(buildingId, Action.ASSET_DELETE, spaceOrNull(buildingId, asset));
         asset.archive(clock.instant());
+        plans.pauseForAsset(assetId, clock.instant()); // nobody should be sent to service a retired item
     }
 
     public AssetDto restore(UUID buildingId, UUID assetId) {

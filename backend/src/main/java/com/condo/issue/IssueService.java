@@ -238,6 +238,7 @@ public class IssueService {
         String prefix = subtree;
         List<Issue> matching = candidates.stream()
                 .filter(i -> q.assetId() == null || q.assetId().equals(i.getAssetId()))
+                .filter(i -> q.kind() == null || q.kind() == i.getKind())
                 .filter(i -> {
                     if (prefix == null) {
                         return true;
@@ -306,6 +307,9 @@ public class IssueService {
         requireNotMerged(issue);
         if (!issue.isOpen()) {
             throw ApiException.conflict(ErrorCodes.INVALID_TRANSITION, "This issue is resolved — reopen it instead.");
+        }
+        if (issue.isScheduled()) {
+            throw ApiException.conflict(ErrorCodes.INVALID_STATE, "Scheduled maintenance can't be \"me too\"-ed.");
         }
         guard.require(buildingId, Action.ISSUE_REPORT, l.space());
         if (!isAffected(l)) {
@@ -448,7 +452,8 @@ public class IssueService {
         boolean reporter = access.isReporter(m, issue);
         boolean isAffected = isAffected(l);
         boolean merged = issue.isMerged();
-        boolean canMeToo = issue.isOpen() && !isAffected && permissions.can(m, Action.ISSUE_REPORT, l.space());
+        boolean canMeToo = issue.isOpen() && !issue.isScheduled() && !isAffected
+                && permissions.can(m, Action.ISSUE_REPORT, l.space());
         boolean canMerge = issue.isOpen() && access.canTriage(m, issue, l.space());
         boolean canShare = !merged && issue.getVisibility() == Visibility.PRIVATE
                 && (reporter || access.isUnitMember(m, l.space()));

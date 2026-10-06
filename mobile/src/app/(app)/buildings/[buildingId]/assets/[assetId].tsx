@@ -9,6 +9,8 @@ import {
   type SpaceDto,
 } from '@condo/shared';
 import { AssetIcon, AssetTypeGrid, AssetVisibilityBadge } from '../../../../../components/assets/AssetParts';
+import { CostsCard } from '../../../../../components/costs/CostsCard';
+import { formatLocalDate } from '../../../../../lib/time';
 import { IssueRow } from '../../../../../components/issues/IssueParts';
 import { SpacePickerSheet } from '../../../../../components/assets/SpacePickerSheet';
 import { Badge } from '../../../../../components/Badges';
@@ -22,6 +24,7 @@ import {
   useAsset,
   useCatalog,
   useMyPermissions,
+  useMaintenancePlans,
   useOpenIssuesOnAsset,
   useRestoreAsset,
   useSpaces,
@@ -179,6 +182,13 @@ function AssetDetail({
           />
         ) : null}
       </Card>
+      {canDo(perms, 'MAINTENANCE_VIEW') ? <NextMaintenance buildingId={asset.buildingId} assetId={asset.id} /> : null}
+      <CostsCard
+        buildingId={asset.buildingId}
+        assetId={asset.id}
+        canView={canDo(perms, 'COST_VIEW')}
+        canManage={canDo(perms, 'COST_MANAGE') && !asset.archived}
+      />
       {!asset.archived ? <QrLink asset={asset} /> : null}
       {!asset.archived ? <OpenIssues buildingId={asset.buildingId} assetId={asset.id} /> : null}
 
@@ -237,6 +247,28 @@ function QrLink({ asset }: { asset: AssetDto }) {
         </View>
       </Card>
     </>
+  );
+}
+
+/** "Next maintenance: Elevator inspection · Fri 1 Apr 2027" for active plans on this asset. */
+function NextMaintenance({ buildingId, assetId }: { buildingId: string; assetId: string }) {
+  const { colors } = useTheme();
+  const plans = useMaintenancePlans(buildingId);
+  const mine = (plans.data ?? [])
+    .filter((p) => p.assetId === assetId && p.active && p.nextDueOn)
+    .sort((a, b) => a.nextDueOn!.localeCompare(b.nextDueOn!));
+  if (!mine.length) return null;
+  return (
+    <Card>
+      {mine.slice(0, 3).map((p) => (
+        <Text key={p.id} style={{ color: colors.text, fontSize: 15 }}>
+          🛠 Next maintenance: <Text style={{ fontWeight: '700' }}>{p.title}</Text> · {formatLocalDate(p.nextDueOn!)}
+        </Text>
+      ))}
+      {mine[0].recurrenceText ? (
+        <Text style={{ color: colors.textMuted, fontSize: 13 }}>{mine.length === 1 ? mine[0].recurrenceText : ''}</Text>
+      ) : null}
+    </Card>
   );
 }
 

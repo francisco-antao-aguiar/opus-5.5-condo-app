@@ -56,6 +56,10 @@ src/app/                       routes (Expo Router)
   (app)/buildings/[buildingId]/issues/index     issues of a building (mine / building / my unit / manage)
   (app)/buildings/[buildingId]/issues/[issueId] issue detail + timeline (push-notification deep-link target)
   (app)/(tabs)/issues          Issues tab (per building) with the offline outbox
+  (app)/buildings/[buildingId]/bookings/index   book a space · my bookings · requests to review (admins)
+  (app)/buildings/[buildingId]/bookings/new     day strip + slots in the building's time zone → request
+  (app)/buildings/[buildingId]/bookings/[id]    booking detail: approve / reject / cancel (notification target)
+  (app)/buildings/[buildingId]/costs/new        add a cost (+ receipt photo) from an issue or asset (COST_MANAGE)
 src/reports/                   offline report outbox (AsyncStorage) + runner (retries on reconnect / app start)
   join/index                   "Join with a code" (outside the auth guards: works signed in or out)
   join/[code]                  invitation landing: preview, then accept / sign in / create account

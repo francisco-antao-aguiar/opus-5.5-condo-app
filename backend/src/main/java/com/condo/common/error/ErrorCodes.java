@@ -46,6 +46,18 @@ public final class ErrorCodes {
     public static final String FILE_TOO_LARGE = "FILE_TOO_LARGE";
     public static final String UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE";
     public static final String INVALID_PUSH_TOKEN = "INVALID_PUSH_TOKEN";
+    public static final String INVALID_TIME_ZONE = "INVALID_TIME_ZONE";
+    public static final String UNKNOWN_CURRENCY = "UNKNOWN_CURRENCY";
+    public static final String INVALID_AMOUNT = "INVALID_AMOUNT";
+    public static final String INVALID_RECURRENCE = "INVALID_RECURRENCE";
+    public static final String SPACE_HAS_PLANS = "SPACE_HAS_PLANS";
+    public static final String SPACE_HAS_BOOKINGS = "SPACE_HAS_BOOKINGS";
+    public static final String NOT_BOOKABLE = "NOT_BOOKABLE";
+    public static final String BOOKING_CONFLICT = "BOOKING_CONFLICT";
+    public static final String BOOKING_RULES = "BOOKING_RULES";
+    public static final String BOOKING_LIMIT = "BOOKING_LIMIT";
+    public static final String BOOKING_CANCEL_CUTOFF = "BOOKING_CANCEL_CUTOFF";
+    public static final String INVALID_STATE = "INVALID_STATE";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
 
     private ErrorCodes() {

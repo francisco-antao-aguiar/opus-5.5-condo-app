@@ -1,0 +1,191 @@
+<div class="page-head">
+  <h1>Bookings</h1>
+  @if (canBook()) {
+    <button type="button" class="btn" (click)="copyCalendarLink()" title="Subscribe to your confirmed bookings in Google/Apple/Outlook calendar">📅 Copy calendar link</button>
+  }
+</div>
+
+<nav class="tabs" aria-label="Booking views">
+  @for (t of tabs(); track t) {
+    <button type="button" class="tab" [class.active]="tab() === t" (click)="setTab(t)">
+      {{ tabLabels[t] }}
+      @if (t === 'approvals' && pendingCount() > 0) {
+        <span class="badge badge-warn">{{ pendingCount() }}</span>
+      }
+    </button>
+  }
+</nav>
+
+@if (tz() !== browserTz) {
+  <p class="muted small">All times are in the building's time zone, {{ tz() }} (your device is in {{ browserTz }}).</p>
+}
+
+@if (error(); as e) {
+  <div class="alert alert-error" role="alert">
+    <strong>{{ e.title }}</strong>@if (e.detail) {<p>{{ e.detail }}</p>}
+    <button type="button" class="btn btn-sm" (click)="load()">Retry</button>
+  </div>
+}
+
+@switch (tab()) {
+  @case ('book') {
+    @if (!enabledSpaces().length && !loading()) {
+      <div class="empty card">
+        <p><strong>No spaces can be booked yet.</strong></p>
+        <p class="muted">
+          @if (canManage()) {
+            Make a common area bookable under “Bookable spaces”.
+          } @else {
+            Ask a building admin to open the party room, BBQ or guest parking for bookings.
+          }
+        </p>
+      </div>
+    } @else {
+      <div class="space-picker chips">
+        @for (p of enabledSpaces(); track p.spaceId) {
+          <button type="button" class="chip" [class.selected]="p.spaceId === selectedSpaceId()" (click)="pickSpace(p.spaceId)">
+            {{ p.spaceName }} <span class="muted small">{{ p.locationLabel }}</span>
+          </button>
+        }
+      </div>
+      @if (selectedPolicy(); as p) {
+        <section class="card">
+          <app-booking-calendar [buildingId]="ctx.buildingId()!" [policy]="p" (requested)="onRequested()" />
+        </section>
+      }
+    }
+    @if (mine().length) {
+      <p class="small"><a [routerLink]="[]" [queryParams]="{ tab: 'mine' }" queryParamsHandling="merge">My bookings ({{ mine().length }}) ›</a></p>
+    }
+  }
+
+  @case ('mine') {
+    <div class="booking-list">
+      @for (b of mine(); track b.id) {
+        <div class="card booking-row" [class.inactive]="b.status === 'REJECTED' || b.status === 'CANCELLED'">
+          <div class="grow">
+            <a [routerLink]="['/buildings', ctx.buildingId(), 'bookings', b.id]"><strong>{{ b.spaceName }}</strong></a>
+            · {{ range(b) }}
+            <div class="row gap wrap small">
+              <span [class]="'badge ' + statusBadge[b.status]">{{ statusLabels[b.status] }}</span>
+              @if (b.note) {
+                <span class="muted">“{{ b.note }}”</span>
+              }
+              @if (b.decisionNote) {
+                <span>Admin: “{{ b.decisionNote }}”</span>
+              }
+            </div>
+          </div>
+          @if (b.canCancel && (b.status === 'PENDING' || b.status === 'CONFIRMED')) {
+            <button type="button" class="btn btn-sm btn-danger" [disabled]="busyId() === b.id" (click)="decision.set({ booking: b, kind: 'cancel' })">
+              {{ b.status === 'PENDING' ? 'Withdraw' : 'Cancel' }}
+            </button>
+          }
+        </div>
+      } @empty {
+        <p class="muted">{{ loading() ? 'Loading…' : 'You have no bookings yet.' }}</p>
+      }
+    </div>
+  }
+
+  @case ('approvals') {
+    <div class="booking-list">
+      @for (b of queue(); track b.id) {
+        <div class="card booking-row" [class.pending]="b.status === 'PENDING'">
+          <div class="grow">
+            <a [routerLink]="['/buildings', ctx.buildingId(), 'bookings', b.id]"><strong>{{ b.spaceName }}</strong></a>
+            · {{ range(b) }}
+            <div class="small">
+              {{ b.requestedByName ?? 'A member' }}@if (b.unitName) { · {{ b.unitName }}}
+              @if (b.note) {
+                · <span class="muted">“{{ b.note }}”</span>
+              }
+            </div>
+            <div class="row gap wrap small">
+              <span [class]="'badge ' + statusBadge[b.status]">{{ statusLabels[b.status] }}</span>
+              @if (b.status === 'PENDING') {
+                <span class="muted" [class.field-error]="waitedLong(b)">requested {{ age(b) }}</span>
+              }
+            </div>
+          </div>
+          <div class="row gap wrap">
+            @if (b.canDecide && b.status === 'PENDING') {
+              <button type="button" class="btn btn-sm btn-primary" [disabled]="busyId() === b.id" (click)="approve(b)">Approve</button>
+              <button type="button" class="btn btn-sm btn-danger" [disabled]="busyId() === b.id" (click)="decision.set({ booking: b, kind: 'reject' })">Reject…</button>
+            }
+            @if (b.status === 'CONFIRMED' && b.canCancel) {
+              <button type="button" class="btn btn-sm btn-danger" [disabled]="busyId() === b.id" (click)="decision.set({ booking: b, kind: 'cancel' })">Cancel…</button>
+            }
+          </div>
+        </div>
+      } @empty {
+        <p class="muted">{{ loading() ? 'Loading…' : 'Nothing to review. 👍' }}</p>
+      }
+    </div>
+  }
+
+  @case ('spaces') {
+    <p class="muted small">Common areas members can request. Every request still needs an admin's approval.</p>
+    <div class="table-wrap">
+      <table class="table members-table">
+        <thead>
+          <tr><th>Space</th><th>Booking</th><th>Rules</th><th><span class="sr-only">Actions</span></th></tr>
+        </thead>
+        <tbody>
+          @for (o of commonAreas(); track o.space.id) {
+            @let p = policyBySpace().get(o.space.id);
+            <tr>
+              <td data-label="Space"><strong>{{ o.space.name }}</strong> <span class="muted small">{{ o.label }}</span></td>
+              <td data-label="Booking">
+                @if (p?.enabled) {
+                  <span class="badge badge-ok">Bookable</span>
+                } @else if (p) {
+                  <span class="badge">Off</span>
+                } @else {
+                  <span class="muted small">Not bookable</span>
+                }
+              </td>
+              <td data-label="Rules" class="small">
+                @if (p) {
+                  {{ p.slotMinutes }}-min slots · {{ p.minMinutes }}–{{ p.maxMinutes }} min · up to {{ p.advanceDays }} days ahead
+                  @if (p.maxActivePerUnit) {
+                    · max {{ p.maxActivePerUnit }}/unit
+                  }
+                }
+              </td>
+              <td class="cell-actions">
+                <button type="button" class="btn btn-sm" (click)="editPolicy(o.space)">{{ p ? 'Edit' : 'Make bookable…' }}</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="4" class="muted">No common areas. Add one (party room, BBQ…) on the Structure page.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}
+
+@if (decision(); as d) {
+  <app-reason-dialog
+    [title]="d.kind === 'reject' ? 'Reject this request?' : d.booking.mine && d.booking.status === 'PENDING' ? 'Withdraw this request?' : 'Cancel this booking?'"
+    [message]="d.booking.spaceName + ' · ' + range(d.booking)"
+    [label]="d.booking.mine ? 'Note' : 'Reason (shown to the requester)'"
+    [confirmText]="d.kind === 'reject' ? 'Reject' : d.booking.mine && d.booking.status === 'PENDING' ? 'Withdraw' : 'Cancel booking'"
+    [busy]="busyId() === d.booking.id"
+    (confirmed)="decide(d, $event)"
+    (closed)="decision.set(null)"
+  />
+}
+
+@if (editingPolicy(); as e) {
+  <app-booking-policy-dialog
+    [buildingId]="ctx.buildingId()!"
+    [spaceId]="e.space.id"
+    [spaceName]="e.space.name"
+    [timeZone]="tz()"
+    [existing]="e.policy"
+    (saved)="load()"
+    (closed)="editingPolicy.set(null)"
+  />
+}

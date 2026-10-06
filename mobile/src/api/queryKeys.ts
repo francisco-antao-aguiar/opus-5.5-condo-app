@@ -20,6 +20,17 @@ export const queryKeys = {
   issueList: (id: UUID, view: string, status: string) => ['buildings', id, 'issues', 'list', view, status] as const,
   issue: (id: UUID, issueId: UUID) => ['buildings', id, 'issues', 'detail', issueId] as const,
   openIssuesOnAsset: (id: UUID, assetId: UUID) => ['buildings', id, 'issues', 'onAsset', assetId] as const,
+  maintenancePlans: (id: UUID) => ['buildings', id, 'maintenance'] as const,
+  maintenancePlan: (id: UUID, planId: UUID) => ['buildings', id, 'maintenance', planId] as const,
+  /** Prefix of every cost query in a building. */
+  costs: (id: UUID) => ['buildings', id, 'costs'] as const,
+  costList: (id: UUID, anchor: string) => ['buildings', id, 'costs', 'list', anchor] as const,
+  /** Prefix of every booking query in a building. */
+  bookings: (id: UUID) => ['buildings', id, 'bookings'] as const,
+  bookableSpaces: (id: UUID) => ['buildings', id, 'bookings', 'spaces'] as const,
+  availability: (id: UUID, spaceId: UUID, day: string) => ['buildings', id, 'bookings', 'availability', spaceId, day] as const,
+  bookingList: (id: UUID, filter: string) => ['buildings', id, 'bookings', 'list', filter] as const,
+  calendarLink: ['me', 'calendar-link'] as const,
   /** In-app notifications (not building-scoped). */
   notifications: ['notifications'] as const,
   notificationList: ['notifications', 'list'] as const,

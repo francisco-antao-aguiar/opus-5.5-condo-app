@@ -67,6 +67,26 @@ export const routes: Routes = [
         loadComponent: () => import('./building/issue-detail.page').then((m) => m.IssueDetailPage),
       },
       {
+        path: 'maintenance',
+        title: 'Maintenance · Condo',
+        loadComponent: () => import('./building/maintenance.page').then((m) => m.MaintenancePage),
+      },
+      {
+        path: 'costs',
+        title: 'Costs · Condo',
+        loadComponent: () => import('./building/costs.page').then((m) => m.CostsPage),
+      },
+      {
+        path: 'bookings',
+        title: 'Bookings · Condo',
+        loadComponent: () => import('./building/bookings.page').then((m) => m.BookingsPage),
+      },
+      {
+        path: 'bookings/:bookingId',
+        title: 'Booking · Condo',
+        loadComponent: () => import('./building/booking-detail.page').then((m) => m.BookingDetailPage),
+      },
+      {
         path: 'assets/labels',
         title: 'QR labels · Condo',
         loadComponent: () => import('./building/labels.page').then((m) => m.LabelsPage),

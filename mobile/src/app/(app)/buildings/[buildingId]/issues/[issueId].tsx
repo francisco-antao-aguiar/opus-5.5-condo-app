@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import type { IssueDto, IssueStatus, UUID } from '@condo/shared';
+import { canDo, type IssueDto, type IssueStatus, type UUID } from '@condo/shared';
+import { CostsCard } from '../../../../../components/costs/CostsCard';
+import { formatLocalDate } from '../../../../../lib/time';
 import { AssetIcon } from '../../../../../components/assets/AssetParts';
 import { Badge } from '../../../../../components/Badges';
 import { Button } from '../../../../../components/Button';
@@ -11,6 +13,8 @@ import { Card, FormError, ScrollScreen, SectionTitle } from '../../../../../comp
 import { QueryGate } from '../../../../../components/StateView';
 import { TextField } from '../../../../../components/TextField';
 import {
+  useMaintenancePlan,
+  useMyPermissions,
   useAddIssuePhoto,
   useChangeIssueStatus,
   useCommentIssue,
@@ -54,6 +58,9 @@ function IssueDetail({ issue, refetch }: { issue: IssueDto; refetch: () => void 
   const [text, setText] = useState('');
   const [photoError, setPhotoError] = useState<string | null>(null);
   const me = issue.me;
+  const scheduled = issue.kind === 'SCHEDULED';
+  const perms = useMyPermissions(b);
+  const plan = useMaintenancePlan(b, scheduled ? issue.maintenancePlanId : null);
   const merged = issue.mergedIntoId
     ? {
         id: issue.mergedIntoId,
@@ -112,7 +119,9 @@ function IssueDetail({ issue, refetch }: { issue: IssueDto; refetch: () => void 
         </View>
         <View style={styles.badges}>
           <StatusBadge status={issue.status} />
-          <Badge label={'👥 ' + affectedText(issue.affectedCount)} color={colors.text} background={colors.surfaceAlt} />
+          {!scheduled ? (
+            <Badge label={'👥 ' + affectedText(issue.affectedCount)} color={colors.text} background={colors.surfaceAlt} />
+          ) : null}
           {issue.visibility === 'PRIVATE' ? (
             <Badge
               label={issue.sharedWithAdmins ? 'Private · shared with management' : 'Private to the unit'}
@@ -136,12 +145,49 @@ function IssueDetail({ issue, refetch }: { issue: IssueDto; refetch: () => void 
 
       <FormError message={error ? errorMessage(error) : photoError} />
 
-      {/* Me too / withdraw */}
-      {!merged && me.canMeToo && !me.isAffected ? (
+      {scheduled ? (
+        <Card style={issue.overdue ? { borderWidth: 2, borderColor: colors.danger } : undefined}>
+          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>🛠 Scheduled maintenance</Text>
+          {plan.data ? <Text style={{ color: colors.text, fontSize: 16 }}>{plan.data.title}</Text> : null}
+          {issue.dueOn ? (
+            <Text style={{ color: issue.overdue ? colors.danger : colors.textMuted, fontSize: 15, fontWeight: issue.overdue ? '700' : '400' }}>
+              {issue.overdue ? 'OVERDUE · was due ' : 'Due '}
+              {formatLocalDate(issue.dueOn)}
+            </Text>
+          ) : null}
+          {plan.data?.recurrenceText ? (
+            <Text style={{ color: colors.textMuted, fontSize: 14 }}>{plan.data.recurrenceText}</Text>
+          ) : null}
+          {plan.data?.assigneeNote ? (
+            <Text style={{ color: colors.textMuted, fontSize: 14 }}>By: {plan.data.assigneeNote}</Text>
+          ) : null}
+          {plan.data?.description ? <Text style={{ color: colors.text, fontSize: 15 }}>{plan.data.description}</Text> : null}
+          {plan.data?.checklist.length ? (
+            <View style={{ gap: 4 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase' }}>Checklist</Text>
+              {plan.data.checklist.map((item, i) => (
+                <Text key={i} style={{ color: colors.text, fontSize: 15 }}>☐ {item}</Text>
+              ))}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
+
+      <CostsCard
+        buildingId={b}
+        issueId={issue.id}
+        canView={canDo(perms.data, 'COST_VIEW')}
+        canManage={canDo(perms.data, 'COST_MANAGE')}
+        defaultDescription={issue.title}
+        defaultCategory={scheduled ? 'MAINTENANCE' : 'REPAIR'}
+      />
+
+      {/* Me too / withdraw — never on scheduled maintenance tasks. */}
+      {!merged && !scheduled && me.canMeToo && !me.isAffected ? (
         <Button title="Me too — this affects me" onPress={() => meToo.mutate(true)} loading={meToo.isPending} style={styles.big} />
       ) : null}
       {/* canMeToo is false once affected; any non-reporter may withdraw (the server re-checks). */}
-      {!merged && me.isAffected && !me.isReporter ? (
+      {!merged && !scheduled && me.isAffected && !me.isReporter ? (
         <Button
           title="I'm not affected any more"
           variant="ghost"

@@ -37,15 +37,20 @@ public class SpaceService {
     private final AssetRepository assets;
     private final SpacePrivacy privacy;
     private final IssueRepository issues;
+    private final com.condo.maintenance.MaintenancePlanRepository plans;
+    private final com.condo.booking.BookingRepository bookings;
 
     public SpaceService(SpaceRepository spaces, StructureGenerator generator, AccessGuard guard,
-            AssetRepository assets, SpacePrivacy privacy, IssueRepository issues) {
+            AssetRepository assets, SpacePrivacy privacy, IssueRepository issues,
+            com.condo.maintenance.MaintenancePlanRepository plans, com.condo.booking.BookingRepository bookings) {
         this.spaces = spaces;
         this.generator = generator;
         this.guard = guard;
         this.assets = assets;
         this.privacy = privacy;
         this.issues = issues;
+        this.plans = plans;
+        this.bookings = bookings;
     }
 
     // ---------- queries ----------
@@ -134,6 +139,14 @@ public class SpaceService {
         if (!cascade && spaces.existsByParentId(node.getId())) {
             throw ApiException.conflict(ErrorCodes.SPACE_HAS_CHILDREN,
                     "This space has sub-spaces. Delete them too (cascade) or move them first.");
+        }
+        if (bookings.existsUpcomingInSubtree(buildingId, node.getPath(), java.time.Instant.now())) {
+            throw ApiException.conflict(ErrorCodes.SPACE_HAS_BOOKINGS,
+                    "This space has upcoming bookings. Cancel them first.");
+        }
+        if (plans.existsInSubtree(buildingId, node.getPath())) {
+            throw ApiException.conflict(ErrorCodes.SPACE_HAS_PLANS,
+                    "Maintenance plans target this space. Move or delete them first.");
         }
         if (issues.existsOpenInSubtree(buildingId, node.getPath())) {
             throw ApiException.conflict(ErrorCodes.SPACE_HAS_OPEN_ISSUES,

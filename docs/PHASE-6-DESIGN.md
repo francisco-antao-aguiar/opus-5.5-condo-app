@@ -1,8 +1,9 @@
-# Phase 6 — Design (not implemented)
+# Phase 6 — Design
 
 Maintenance schedules and recurring tasks, shared-space booking and cost tracking.
-This document is the design only: no code ships with it. Its job is to show how each feature sits on the
-phase 1–5 model and to list the few, all additive, changes that model needs.
+**Status: implemented** (backend, web and mobile) following this design and the decisions below. This
+document stays as the rationale: how each feature sits on the phase 1–5 model and the additive changes it
+needed. The endpoint list lives in [DESIGN.md](DESIGN.md#phase-6-endpoints).
 
 ## Decisions (2026-10-06)
 

@@ -38,7 +38,19 @@ const FRIENDLY: Record<string, string> = {
   SPACE_HAS_OPEN_ISSUES: 'This space still has open issues. Resolve them first.',
   PHOTO_LIMIT: 'This issue already has the maximum number of photos.',
   FILE_TOO_LARGE: 'That file is too large (max 10 MB).',
-  UNSUPPORTED_MEDIA_TYPE: 'Use a JPEG, PNG, WebP or HEIC photo.',
+  UNSUPPORTED_MEDIA_TYPE: 'That file type isn’t supported here.',
+  INVALID_TIME_ZONE: 'Unknown time zone.',
+  UNKNOWN_CURRENCY: 'Unknown currency code.',
+  INVALID_AMOUNT: "That amount isn't valid for its currency.",
+  INVALID_RECURRENCE: "That repeat pattern isn't valid.",
+  SPACE_HAS_PLANS: 'This space still has active maintenance plans. Move or pause them first.',
+  SPACE_HAS_BOOKINGS: 'This space has upcoming bookings. Cancel them first.',
+  NOT_BOOKABLE: "This space can't be booked right now.",
+  BOOKING_CONFLICT: 'That time is already requested or booked.',
+  BOOKING_RULES: "That time doesn't fit this space's booking rules.",
+  BOOKING_LIMIT: 'Your unit already has the maximum number of active bookings here.',
+  BOOKING_CANCEL_CUTOFF: "It's too late to cancel this booking online.",
+  INVALID_STATE: 'This was already decided or cancelled. Refresh to see the latest.',
 };
 
 /** Shown after a 409 CONFLICT, once the page has refetched the latest data. */

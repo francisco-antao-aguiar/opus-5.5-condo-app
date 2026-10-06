@@ -87,7 +87,15 @@ public class NotificationService {
     }
 
     public void deliver(IssueActivity activity) {
-        List<PushMessage> pushes = tx.execute(status -> compose(activity));
+        push(tx.execute(status -> compose(activity).map(this::store).orElse(List.of())));
+    }
+
+    /** Generic delivery for any feature (bookings, maintenance tasks…). */
+    public void deliver(NotificationRequest request) {
+        push(tx.execute(status -> store(request)));
+    }
+
+    private void push(List<PushMessage> pushes) {
         if (pushes == null || pushes.isEmpty()) {
             return;
         }
@@ -98,8 +106,29 @@ public class NotificationService {
         }
     }
 
-    /** Stores the in-app notifications and returns the pushes to send. */
-    private List<PushMessage> compose(IssueActivity a) {
+    /** Stores one in-app notification per recipient and returns the pushes to send. */
+    private List<PushMessage> store(NotificationRequest r) {
+        if (r.recipients().isEmpty()) {
+            return List.of();
+        }
+        Instant now = clock.instant();
+        List<Notification> created = new ArrayList<>();
+        for (UUID user : r.recipients()) {
+            created.add(new Notification(user, r.buildingId(), r.issueId(), r.type(), r.title(), r.body(), r.link(),
+                    now));
+        }
+        notifications.saveAll(created);
+        String buildingName = buildings.findById(r.buildingId()).map(Building::getName).orElse("");
+        String pushTitle = Notification.truncate(r.title() + " · " + buildingName, 120);
+        List<PushMessage> pushes = new ArrayList<>();
+        for (PushToken t : pushTokens.findByUserIdIn(r.recipients())) {
+            pushes.add(new PushMessage(t.getToken(), pushTitle, Notification.truncate(r.body(), 180), r.link()));
+        }
+        return pushes;
+    }
+
+    /** Who should hear about this issue activity, and what to tell them. */
+    private java.util.Optional<NotificationRequest> compose(IssueActivity a) {
         NotificationType type = switch (a.type()) {
             case REPORTED -> NotificationType.ISSUE_REPORTED;
             case STATUS_CHANGED -> NotificationType.ISSUE_STATUS_CHANGED;
@@ -111,7 +140,7 @@ public class NotificationService {
         IssueEvent event = events.findById(a.eventId()).orElse(null);
         Building building = buildings.findById(a.buildingId()).orElse(null);
         if (type == null || issue == null || event == null || building == null) {
-            return List.of();
+            return java.util.Optional.empty();
         }
         Space space = issue.getSpaceId() != null ? spaces.findById(issue.getSpaceId()).orElse(null) : null;
         Instant now = clock.instant();
@@ -133,7 +162,7 @@ public class NotificationService {
                     .forEach(recipients::add);
         }
         if (recipients.isEmpty()) {
-            return List.of();
+            return java.util.Optional.empty();
         }
 
         String actor = users.findById(a.actorUserId()).map(User::getDisplayName).orElse("Someone");
@@ -142,19 +171,8 @@ public class NotificationService {
         UUID linkIssue = type == NotificationType.ISSUE_MERGED && event.getRelatedIssueId() != null
                 ? event.getRelatedIssueId() : issue.getId();
         String link = "/buildings/" + building.getId() + "/issues/" + linkIssue;
-
-        List<Notification> created = new ArrayList<>();
-        for (UUID user : recipients) {
-            created.add(new Notification(user, building.getId(), issue.getId(), type, title, body, link, now));
-        }
-        notifications.saveAll(created);
-
-        String pushTitle = Notification.truncate(title + " · " + building.getName(), 120);
-        List<PushMessage> pushes = new ArrayList<>();
-        for (PushToken t : pushTokens.findByUserIdIn(recipients)) {
-            pushes.add(new PushMessage(t.getToken(), pushTitle, Notification.truncate(body, 180), link));
-        }
-        return pushes;
+        return java.util.Optional.of(
+                new NotificationRequest(building.getId(), recipients, type, issue.getId(), title, body, link));
     }
 
     private String issueTitle(Issue issue) {
@@ -186,6 +204,8 @@ public class NotificationService {
                         : "another issue";
                 yield "Merged into " + target + " by " + actor + " — you'll get its updates";
             }
+            // Task and booking notifications are composed by their own features, never from issue activity.
+            default -> throw new IllegalArgumentException("Not an issue notification: " + type);
         };
     }
 

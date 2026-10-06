@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { IssueDto, IssueStatus, IssueSummaryDto, UUID } from '@condo/shared';
+import { IssueDto, IssueStatus, IssueSummaryDto, MaintenancePlanDto, UUID } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { CONFLICT_RELOADED, describeError, errorCode, ErrorText, isConflict } from '../core/errors';
 import { ConfirmService } from '../core/confirm.service';
@@ -20,12 +20,14 @@ import {
   transitionLabel,
 } from '../shared/issues';
 import { ModalComponent } from '../shared/modal.component';
+import { formatLocalDate, todayIn } from '../shared/zoned';
 import { BuildingContext } from './building-context.service';
+import { CostsPanelComponent } from './costs-panel.component';
 import { TransitionDialogComponent, TransitionRequest } from './transition-dialog.component';
 
 @Component({
   selector: 'app-issue-detail-page',
-  imports: [RouterLink, ModalComponent, TransitionDialogComponent],
+  imports: [RouterLink, ModalComponent, TransitionDialogComponent, CostsPanelComponent],
   templateUrl: './issue-detail.page.html',
 })
 export class IssueDetailPage {
@@ -38,6 +40,11 @@ export class IssueDetailPage {
   readonly issueId = input.required<string>();
 
   protected readonly issue = signal<IssueDto | null>(null);
+  /** The maintenance plan of a scheduled task (for its checklist). */
+  protected readonly plan = signal<MaintenancePlanDto | null>(null);
+  protected readonly ticked = signal<ReadonlySet<number>>(new Set());
+  protected readonly today = computed(() => todayIn(this.ctx.building()?.timeZone ?? 'Europe/Lisbon'));
+  protected readonly localDate = (d: string | null) => formatLocalDate(d);
   protected readonly loading = signal(true);
   protected readonly loadError = signal<ErrorText | null>(null);
   protected readonly busy = signal(false);
@@ -90,12 +97,28 @@ export class IssueDetailPage {
     this.loading.set(true);
     this.loadError.set(null);
     try {
-      this.issue.set(await this.api.client.issues.get(this.bid, this.issueId()));
+      const issue = await this.api.client.issues.get(this.bid, this.issueId());
+      this.issue.set(issue);
+      if (issue.maintenancePlanId && issue.maintenancePlanId !== this.plan()?.id && this.ctx.has('MAINTENANCE_VIEW')) {
+        this.api.client.maintenance.get(this.bid, issue.maintenancePlanId).then(
+          (p) => this.plan.set(p),
+          () => this.plan.set(null),
+        );
+      }
     } catch (e) {
       this.loadError.set(describeError(e));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  protected tick(i: number): void {
+    this.ticked.update((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
   }
 
   protected transitionLabel(to: IssueStatus): string {

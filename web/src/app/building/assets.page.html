@@ -159,6 +159,10 @@
     [asset]="e === 'new' ? null : e"
     [initialSpaceId]="spaceId() || null"
     [canArchive]="e !== 'new' && canArchive(e)"
+    [showCosts]="ctx.has('COST_VIEW')"
+    [canManageCosts]="ctx.has('COST_MANAGE')"
+    [defaultCurrency]="ctx.building()?.currency ?? 'EUR'"
+    [today]="today()"
     (changed)="reload()"
     (closed)="editing.set(null)"
   />

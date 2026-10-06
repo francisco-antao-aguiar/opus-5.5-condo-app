@@ -2,12 +2,14 @@ package com.condo.issue.dto;
 
 import com.condo.asset.dto.AssetDtos.ProblemTypeDto;
 import com.condo.issue.IssueEventType;
+import com.condo.issue.IssueKind;
 import com.condo.issue.IssueStatus;
 import com.condo.space.Visibility;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,7 +23,8 @@ public final class IssueDtos {
             Visibility visibility, boolean sharedWithAdmins, UUID assetId, String assetName, String assetType,
             UUID spaceId, String locationLabel, UUID problemTypeId, String otherText, int affectedCount,
             int photoCount, String reportedByName, Instant createdAt, Instant statusChangedAt,
-            Instant lastActivityAt, boolean affectedByMe, boolean stuck, UUID mergedIntoId, long version) {
+            Instant lastActivityAt, boolean affectedByMe, boolean stuck, UUID mergedIntoId, long version,
+            IssueKind kind, UUID maintenancePlanId, LocalDate dueOn, boolean overdue) {
     }
 
     public record IssueEventDto(UUID id, IssueEventType type, String actorName, IssueStatus fromStatus,
@@ -42,7 +45,8 @@ public final class IssueDtos {
             UUID spaceId, String locationLabel, UUID problemTypeId, String otherText, int affectedCount,
             int photoCount, String reportedByName, Instant createdAt, Instant statusChangedAt,
             Instant lastActivityAt, boolean affectedByMe, boolean stuck, UUID mergedIntoId, String note, List<IssueEventDto> timeline, List<IssuePhotoDto> photos,
-            IssueCapabilities me, long version) {
+            IssueCapabilities me, long version, IssueKind kind, UUID maintenancePlanId, LocalDate dueOn,
+            boolean overdue) {
     }
 
     public record ReportIssueRequest(
@@ -73,7 +77,7 @@ public final class IssueDtos {
     }
 
     public record IssueQuery(String view, String status, UUID spaceId, UUID assetId, String sort, Integer page,
-            Integer size) {
+            Integer size, IssueKind kind) {
     }
 
     public record Page<T>(List<T> items, int page, int size, long total) {
@@ -83,7 +87,7 @@ public final class IssueDtos {
     }
 
     public record IssueDashboard(Map<IssueStatus, Long> counts, long stuckThresholdHours, List<IssueSummaryDto> stuck,
-            List<AssetHotspot> hotspots, int otherTextGroups) {
+            List<AssetHotspot> hotspots, int otherTextGroups, List<IssueSummaryDto> overdue, int dueThisWeek) {
     }
 
     public record OtherTextGroup(String assetType, String normalizedText, String sampleText, int count,

@@ -46,6 +46,15 @@ import { BuildingContext } from './building-context.service';
             <a routerLink="issues" routerLinkActive="active">🚩 Issues</a>
             <a routerLink="structure" routerLinkActive="active">▤ Structure</a>
             <a routerLink="assets" routerLinkActive="active">💡 Assets</a>
+            @if (ctx.has('MAINTENANCE_VIEW')) {
+              <a routerLink="maintenance" routerLinkActive="active">🛠 Maintenance</a>
+            }
+            @if (ctx.has('BOOKING_CREATE') || ctx.has('BOOKING_MANAGE')) {
+              <a routerLink="bookings" routerLinkActive="active">📅 Bookings</a>
+            }
+            @if (ctx.has('COST_VIEW')) {
+              <a routerLink="costs" routerLinkActive="active">🧾 Costs</a>
+            }
             <a routerLink="members" routerLinkActive="active">👥 Members</a>
             @if (ctx.can('CATALOG_EDIT')) {
               <a routerLink="catalog" routerLinkActive="active">☰ Problem catalog</a>

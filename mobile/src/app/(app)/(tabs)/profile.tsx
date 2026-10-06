@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Linking, Platform, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Share, StyleSheet, Text, View } from 'react-native';
+import { api } from '../../../api/client';
+import { FormError } from '../../../components/Layout';
+import { errorMessage } from '../../../lib/errors';
 import Constants from 'expo-constants';
 import { API_URL } from '../../../api/config';
 import { useAuth } from '../../../auth/AuthProvider';
@@ -58,6 +61,8 @@ export default function ProfileScreen() {
             </Card>
 
             <PushSection userId={me.user.id} />
+
+            <CalendarSection />
 
             <SectionTitle>About</SectionTitle>
             <Card>
@@ -122,6 +127,46 @@ function PushSection({ userId }: { userId: string }) {
       <Card>
         <Text style={{ color: colors.textMuted, fontSize: 15 }}>{text}</Text>
         {action ? <Button title={action.label} variant="secondary" onPress={action.onPress} /> : null}
+      </Card>
+    </>
+  );
+}
+
+/** Signed .ics feed of my confirmed bookings, shared to a calendar app. */
+function CalendarSection() {
+  const { colors } = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  async function share() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await api.bookings.calendarLink();
+      const nav = typeof navigator !== 'undefined' ? (navigator as Partial<Navigator>) : undefined;
+      if (Platform.OS === 'web' && !nav?.share) {
+        // Desktop browsers: no share sheet — copy it instead.
+        await nav?.clipboard?.writeText(url).catch(() => undefined);
+        window.alert('Calendar link (copied to the clipboard):\n\n' + url);
+        return;
+      }
+      await Share.share({ message: url, url, title: 'Condo bookings calendar' });
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <SectionTitle>Calendar</SectionTitle>
+      <Card>
+        <Text style={{ color: colors.textMuted, fontSize: 15 }}>
+          Subscribe to your confirmed bookings in Google Calendar, Apple Calendar or Outlook. Keep the link private.
+        </Text>
+        <FormError message={error ? errorMessage(error) : null} />
+        <Button title="Add bookings to my calendar" variant="secondary" onPress={() => void share()} loading={busy} />
       </Card>
     </>
   );

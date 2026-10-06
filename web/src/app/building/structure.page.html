@@ -24,15 +24,25 @@
     @if (b.reason === 'assets') {
       <strong>“{{ b.name }}” can't be deleted: it still has active assets (in it or in a space below it).</strong>
       <p>Archive them or move them to another space first. Archived assets don't block deletion and keep their history.</p>
-    } @else {
+    } @else if (b.reason === 'issues') {
       <strong>“{{ b.name }}” can't be deleted: it still has open issues (in it or in a space below it).</strong>
       <p>Resolve them first. Resolved issues keep their history and location label.</p>
+    } @else if (b.reason === 'plans') {
+      <strong>“{{ b.name }}” can't be deleted: maintenance plans still target it (or a space below it).</strong>
+      <p>Edit those plans to target another place, or pause them.</p>
+    } @else {
+      <strong>“{{ b.name }}” can't be deleted: it has upcoming bookings.</strong>
+      <p>Cancel them first (Bookings → Approvals), then delete the space.</p>
     }
     <div class="row gap wrap">
       @if (b.reason === 'assets') {
         <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'assets']" [queryParams]="{ space: b.id }">Show its assets</a>
-      } @else {
+      } @else if (b.reason === 'issues') {
         <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'issues']" [queryParams]="{ space: b.id, view: 'triage' }">Show its issues</a>
+      } @else if (b.reason === 'plans') {
+        <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'maintenance']">Open maintenance plans</a>
+      } @else {
+        <a class="btn btn-sm" [routerLink]="['/buildings', ctx.buildingId(), 'bookings']" [queryParams]="{ tab: 'approvals' }">Open bookings</a>
       }
       <button type="button" class="btn btn-sm" (click)="blockedDelete.set(null)">Dismiss</button>
     </div>

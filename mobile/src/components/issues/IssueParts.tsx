@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DuplicateIssueInfo, IssueStatus, IssueSummaryDto } from '@condo/shared';
 import { affectedText, statusColors, statusLabel, timeAgo } from '../../lib/issues';
+import { formatLocalDate } from '../../lib/time';
 import { radius, spacing, TAP_MIN, useTheme } from '../../theme';
 import { AssetIcon } from '../assets/AssetParts';
 import { Badge } from '../Badges';
@@ -19,7 +20,11 @@ export function IssueRow({ issue, onPress }: { issue: IssueSummaryDto; onPress: 
       accessibilityRole="button"
       accessibilityLabel={`Issue ${issue.number}, ${issue.title}, ${statusLabel(issue.status)}, ${affectedText(issue.affectedCount)}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.surfaceAlt : colors.surface }]}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? colors.surfaceAlt : colors.surface },
+        issue.overdue && { borderWidth: 2, borderColor: colors.danger },
+      ]}
     >
       {issue.assetType ? (
         <AssetIcon type={issue.assetType} size={44} />
@@ -37,8 +42,21 @@ export function IssueRow({ issue, onPress }: { issue: IssueSummaryDto; onPress: 
           {[issue.assetName, issue.locationLabel].filter(Boolean).join(' · ')}
         </Text>
         <View style={styles.badges}>
+          {issue.kind === 'SCHEDULED' ? (
+            <Badge label="🛠 Maintenance" color={colors.primary} background={colors.surfaceAlt} />
+          ) : null}
+          {issue.overdue ? <Badge label="OVERDUE" color={colors.danger} background={colors.dangerSoft} /> : null}
+          {issue.kind === 'SCHEDULED' && issue.dueOn && !issue.overdue ? (
+            <Badge
+              label={'due ' + formatLocalDate(issue.dueOn, { day: 'numeric', month: 'short' })}
+              color={colors.warning}
+              background={colors.surfaceAlt}
+            />
+          ) : null}
           <StatusBadge status={issue.status} />
-          <Badge label={'👥 ' + issue.affectedCount} color={colors.text} background={colors.surfaceAlt} />
+          {issue.kind !== 'SCHEDULED' ? (
+            <Badge label={'👥 ' + issue.affectedCount} color={colors.text} background={colors.surfaceAlt} />
+          ) : null}
           {issue.photoCount ? <Badge label={'📷 ' + issue.photoCount} color={colors.text} background={colors.surfaceAlt} /> : null}
           {issue.affectedByMe ? <Badge label="You're affected" color={colors.success} background={colors.commonSoft} /> : null}
           {issue.visibility === 'PRIVATE' ? (

@@ -104,8 +104,20 @@ public class IssueInsightsService {
 
         int otherGroups = (int) groupOtherTexts(member, buildingId, spacesById).stream()
                 .filter(g -> g.count() >= 2).count();
+
+        java.time.LocalDate today = views.today(buildingId);
+        List<Issue> overdue = triageable.stream()
+                .filter(i -> i.isOverdueOn(today))
+                .sorted(Comparator.comparing(Issue::getDueOn))
+                .limit(STUCK_LIMIT)
+                .toList();
+        int dueThisWeek = (int) triageable.stream()
+                .filter(i -> i.isScheduled() && i.isOpen() && i.getDueOn() != null
+                        && !i.getDueOn().isBefore(today) && !i.getDueOn().isAfter(today.plusDays(7)))
+                .count();
         return new IssueDashboard(counts, props.issues().stuckAfter().toHours(),
-                views.summaries(stuck, member.getUser().getId()), hotspots, otherGroups);
+                views.summaries(stuck, member.getUser().getId()), hotspots, otherGroups,
+                views.summaries(overdue, member.getUser().getId()), dueThisWeek);
     }
 
     /** Free "Other" texts not yet filed under a catalog entry, grouped by asset type and normalized text. */

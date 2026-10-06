@@ -5,6 +5,7 @@ import com.condo.auth.UserRepository;
 import com.condo.building.dto.BuildingDtos.BuildingDto;
 import com.condo.building.dto.BuildingDtos.CreateBuildingRequest;
 import com.condo.building.dto.BuildingDtos.UpdateBuildingRequest;
+import com.condo.common.config.AppProperties;
 import com.condo.common.error.ApiException;
 import com.condo.common.error.ErrorCodes;
 import com.condo.common.persistence.Versions;
@@ -39,10 +40,11 @@ public class BuildingService {
     private final SpaceService spaceService;
     private final AccessGuard guard;
     private final Clock clock;
+    private final AppProperties props;
 
     public BuildingService(BuildingRepository buildings, MembershipRepository memberships, UserRepository users,
             GovernanceModeRepository modes, SpaceRepository spaces, SpaceService spaceService, AccessGuard guard,
-            Clock clock) {
+            Clock clock, AppProperties props) {
         this.buildings = buildings;
         this.memberships = memberships;
         this.users = users;
@@ -51,13 +53,16 @@ public class BuildingService {
         this.spaceService = spaceService;
         this.guard = guard;
         this.clock = clock;
+        this.props = props;
     }
 
     /** Any signed-in user can create a building; they become its first ADMIN. */
     public BuildingDto create(CreateBuildingRequest req) {
         User creator = users.getReferenceById(CurrentUser.id());
         String mode = requireMode(req.governanceMode() != null ? req.governanceMode() : GovernanceMode.MANAGED);
-        Building building = buildings.save(new Building(req.name().trim(), blankToNull(req.address()), mode));
+        Building building = buildings.save(new Building(req.name().trim(), blankToNull(req.address()), mode,
+                timeZone(req.timeZone() != null ? req.timeZone() : props.buildings().defaultTimeZone()),
+                currency(req.currency() != null ? req.currency() : props.buildings().defaultCurrency())));
         Space root = spaceService.createRoot(building.getId(), building.getName());
         memberships.save(new Membership(building, creator, Role.ADMIN, null, null));
         if (req.structure() != null) {
@@ -90,10 +95,34 @@ public class BuildingService {
         Building building = m.getBuilding();
         Versions.requireCurrent(req.version(), building);
         building.update(req.name().trim(), blankToNull(req.address()), requireMode(req.governanceMode()));
+        building.setLocale(req.timeZone() != null ? timeZone(req.timeZone()) : building.getTimeZone(),
+                req.currency() != null ? currency(req.currency()) : building.getCurrency());
         Space root = spaceService.rootOf(buildingId);
         root.setName(building.getName());
         buildings.flush();
         return toDto(building, root.getId());
+    }
+
+    /** Normalized IANA id ("europe/lisbon" → "Europe/Lisbon"); region ids only, no raw offsets. */
+    static String timeZone(String id) {
+        try {
+            java.time.ZoneId zone = java.time.ZoneId.of(id.trim());
+            if (!(zone instanceof java.time.ZoneOffset)) {
+                return zone.getId();
+            }
+        } catch (java.time.DateTimeException e) {
+            // fall through
+        }
+        throw ApiException.badRequest(ErrorCodes.INVALID_TIME_ZONE, "Unknown time zone " + id
+                + ". Use a region like Europe/Lisbon.");
+    }
+
+    static String currency(String code) {
+        try {
+            return java.util.Currency.getInstance(code.trim().toUpperCase(java.util.Locale.ROOT)).getCurrencyCode();
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest(ErrorCodes.UNKNOWN_CURRENCY, "Unknown currency " + code + ".");
+        }
     }
 
     private String requireMode(String code) {
@@ -105,7 +134,7 @@ public class BuildingService {
 
     private static BuildingDto toDto(Building b, UUID rootSpaceId) {
         return new BuildingDto(b.getId(), b.getName(), b.getAddress(), b.getGovernanceMode(), rootSpaceId,
-                b.getCreatedAt(), b.getVersion() != null ? b.getVersion() : 0L);
+                b.getCreatedAt(), b.getTimeZone(), b.getCurrency(), b.getVersion() != null ? b.getVersion() : 0L);
     }
 
     private static String blankToNull(String s) {

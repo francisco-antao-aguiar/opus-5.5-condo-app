@@ -4,13 +4,28 @@ import { useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useLayoutEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../api/queryKeys';
-import type { NotificationDto } from '@condo/shared';
+import type { NotificationDto, NotificationType } from '@condo/shared';
 import { Button } from '../../../components/Button';
 import { EmptyView, ErrorView } from '../../../components/StateView';
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationList } from '../../../hooks/queries';
 import { timeAgo } from '../../../lib/issues';
 import { openLink } from '../../../notifications/push';
 import { radius, spacing, TAP_MIN, useTheme } from '../../../theme';
+
+/** Icon per notification type (unknown future types fall back to a bell). */
+const TYPE_ICON: Partial<Record<NotificationType, string>> = {
+  ISSUE_REPORTED: '🆕',
+  ISSUE_STATUS_CHANGED: '🔧',
+  ISSUE_COMMENTED: '💬',
+  ISSUE_MERGED: '🔗',
+  TASK_DUE: '🛠',
+  TASK_OVERDUE: '⏰',
+  BOOKING_REQUESTED: '📅',
+  BOOKING_REVIEW_REMINDER: '⏳',
+  BOOKING_CONFIRMED: '✅',
+  BOOKING_REJECTED: '❌',
+  BOOKING_CANCELLED: '🚫',
+};
 
 /** In-app notifications: newest first, unread dot, tap → mark read + open the issue. */
 export default function InboxScreen() {
@@ -94,6 +109,9 @@ export default function InboxScreen() {
             style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.surfaceAlt : colors.surface }]}
           >
             <View style={[styles.dot, { backgroundColor: item.read ? 'transparent' : colors.primary }]} />
+            <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">
+              {TYPE_ICON[item.type] ?? '🔔'}
+            </Text>
             <View style={styles.flex}>
               <Text style={{ color: colors.text, fontSize: 16, fontWeight: item.read ? '500' : '700' }}>{item.title}</Text>
               <Text style={{ color: colors.text, fontSize: 15 }} numberOfLines={3}>
@@ -125,4 +143,5 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dot: { width: 10, height: 10, borderRadius: 5, marginTop: 7 },
+  icon: { fontSize: 22, marginTop: 1 },
 });

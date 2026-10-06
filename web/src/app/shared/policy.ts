@@ -12,6 +12,12 @@ export const ACTION_LABELS: Record<Action, string> = {
   CATALOG_EDIT: 'Edit problem catalog',
   MEMBER_INVITE: 'Invite members',
   MEMBER_MANAGE: 'Manage members',
+  MAINTENANCE_VIEW: 'View maintenance',
+  MAINTENANCE_MANAGE: 'Manage maintenance plans',
+  BOOKING_CREATE: 'Request bookings',
+  BOOKING_MANAGE: 'Approve bookings & policies',
+  COST_VIEW: 'View costs',
+  COST_MANAGE: 'Manage costs',
 };
 
 const ACTION_ORDER = Object.keys(ACTION_LABELS) as Action[];

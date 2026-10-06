@@ -7,6 +7,14 @@ import com.condo.asset.ProblemTypeHidden;
 import com.condo.asset.ProblemTypeHiddenRepository;
 import com.condo.asset.ProblemTypeRepository;
 import com.condo.auth.User;
+import com.condo.booking.Booking;
+import com.condo.booking.BookingPolicy;
+import com.condo.booking.BookingPolicyRepository;
+import com.condo.booking.BookingRepository;
+import com.condo.booking.OpeningHours;
+import com.condo.cost.CostEntry;
+import com.condo.cost.CostEntryRepository;
+import com.condo.cost.Money;
 import com.condo.auth.UserRepository;
 import com.condo.building.Building;
 import com.condo.building.BuildingRepository;
@@ -24,6 +32,9 @@ import com.condo.issue.IssueStatus;
 import com.condo.issue.OtherTexts;
 import com.condo.space.SpaceService;
 import com.condo.invitation.InvitationRepository;
+import com.condo.maintenance.MaintenancePlan;
+import com.condo.maintenance.MaintenancePlanRepository;
+import com.condo.maintenance.Recurrence;
 import com.condo.member.Membership;
 import com.condo.notification.Notification;
 import com.condo.notification.NotificationRepository;
@@ -36,6 +47,8 @@ import com.condo.space.Visibility;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +90,10 @@ public class DevDataSeeder implements ApplicationRunner {
     private final IssueAffectedRepository issueAffected;
     private final IssueEventRepository issueEvents;
     private final NotificationRepository notifications;
+    private final MaintenancePlanRepository plans;
+    private final CostEntryRepository costs;
+    private final BookingPolicyRepository bookingPolicies;
+    private final BookingRepository bookings;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -84,7 +101,9 @@ public class DevDataSeeder implements ApplicationRunner {
             MembershipRepository memberships, InvitationRepository invitations, AssetRepository assets,
             ProblemTypeRepository problemTypes, ProblemTypeHiddenRepository hiddenProblemTypes,
             IssueRepository issues, IssueAffectedRepository issueAffected, IssueEventRepository issueEvents,
-            NotificationRepository notifications, PasswordEncoder passwordEncoder, Clock clock) {
+            NotificationRepository notifications, MaintenancePlanRepository plans, CostEntryRepository costs,
+            BookingPolicyRepository bookingPolicies, BookingRepository bookings, PasswordEncoder passwordEncoder,
+            Clock clock) {
         this.users = users;
         this.buildings = buildings;
         this.spaces = spaces;
@@ -97,6 +116,10 @@ public class DevDataSeeder implements ApplicationRunner {
         this.issueAffected = issueAffected;
         this.issueEvents = issueEvents;
         this.notifications = notifications;
+        this.plans = plans;
+        this.costs = costs;
+        this.bookingPolicies = bookingPolicies;
+        this.bookings = bookings;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
     }
@@ -130,6 +153,7 @@ public class DevDataSeeder implements ApplicationRunner {
         Space lobby = add(s, common(ground, "Lobby", 0));
         add(s, unit(ground, "Café Aurora (shop)", 1));
         add(s, unit(ground, "0A", 2));
+        Space partyRoom = add(s, common(ground, "Party room", 3));
 
         Space f1 = add(s, floor(root, "Floor 1", 1));
         Space unit1A = null;
@@ -246,9 +270,9 @@ public class DevDataSeeder implements ApplicationRunner {
         Membership adminM = memberships.save(new Membership(aurora, admin, Role.ADMIN, null, null));
         memberships.save(new Membership(aurora, manager, Role.MANAGER, null, null));
         Membership ownerM = memberships.save(new Membership(aurora, owner, Role.OWNER, unit2B, null));
-        memberships.save(new Membership(aurora, tenant, Role.TENANT, unit2B,
+        Membership tenantM = memberships.save(new Membership(aurora, tenant, Role.TENANT, unit2B,
                 clock.instant().plus(Duration.ofDays(180))));
-        memberships.save(new Membership(aurora, owner2, Role.OWNER, duplex, null));
+        Membership owner2M = memberships.save(new Membership(aurora, owner2, Role.OWNER, duplex, null));
         // A tenant whose lease ended: shows up as EXPIRED and has no access.
         memberships.save(new Membership(aurora, former, Role.TENANT, unit1A,
                 clock.instant().minus(Duration.ofDays(10))));
@@ -263,6 +287,55 @@ public class DevDataSeeder implements ApplicationRunner {
                 now.plus(Duration.ofDays(14)), null, 7, "A friend staying for a week"));
         invitations.save(new Invitation(aurora, "EXPRD222", Role.TENANT, unit1A, adminM, 1,
                 now.minus(Duration.ofDays(1)), null, "Old link"));
+
+        // ---------- Phase 6: maintenance plans, costs, bookings ----------
+        ZoneId zone = aurora.zone();
+        LocalDate today = LocalDate.ofInstant(now, zone);
+
+        // Elevator inspection every 6 months; this round is 5 days late, so it shows as overdue.
+        MaintenancePlan elevatorPlan = plan(aurora, admin, byName.get("Elevator").getId(), null,
+                "Elevator inspection", List.of("Test the emergency phone", "Check door sensors", "Sign the logbook"),
+                new Recurrence(Recurrence.Unit.MONTH, 6, null, null, null), today.minusDays(5), "Schindler, contract 4471");
+        Issue overdueTask = scheduledTask(aurora, elevatorPlan, byName.get("Elevator"), spaceIndex, admin, now);
+        // Stairwell bulbs once a year; the next round is three weeks away (no task yet).
+        plan(aurora, manager, null, stairwell.getId(), "Replace stairwell bulbs", List.of(),
+                new Recurrence(Recurrence.Unit.YEAR, 1, null, null, null), today.plusDays(21), null);
+        // Fire extinguisher inspection every March.
+        plan(aurora, admin, byName.get("Lobby fire extinguisher").getId(), null, "Fire extinguisher inspection",
+                List.of("Pressure in the green", "Seal intact"), new Recurrence(Recurrence.Unit.YEAR, 1, null, null, null),
+                LocalDate.of(today.getYear() + 1, 3, 15), "Extintores do Norte");
+
+        Asset elevator = byName.get("Elevator");
+        costs.saveAll(List.of(
+                cost(aurora, admin, "340.00", today.minusDays(1), CostEntry.Category.REPAIR,
+                        "Door sensor replaced", "Schindler", elevatorIssue.getId(), null, elevator.getId(),
+                        elevator.getSpaceId()),
+                cost(aurora, manager, "85.90", today.minusDays(8), CostEntry.Category.REPAIR, "Intercom speaker",
+                        "TecnoPorteiro", intercom.getId(), null, byName.get("Entrance intercom").getId(),
+                        lobby.getId()),
+                cost(aurora, admin, "120.00", today.minusDays(5), CostEntry.Category.MAINTENANCE,
+                        "Elevator inspection call-out", "Schindler", overdueTask.getId(), elevatorPlan.getId(),
+                        elevator.getId(), elevator.getSpaceId()),
+                cost(aurora, admin, "220.00", today.minusMonths(2).withDayOfMonth(1), CostEntry.Category.CLEANING,
+                        "Common areas cleaning", "Limpa Já", null, null, null, null),
+                cost(aurora, admin, "220.00", today.minusMonths(1).withDayOfMonth(1), CostEntry.Category.CLEANING,
+                        "Common areas cleaning", "Limpa Já", null, null, null, null),
+                cost(aurora, admin, "64.37", today.minusMonths(1).withDayOfMonth(12), CostEntry.Category.UTILITIES,
+                        "Common electricity", "EDP", null, null, null, null)));
+
+        // The party room can be booked; every request waits for an admin.
+        BookingPolicy partyPolicy = new BookingPolicy(partyRoom.getId(), a);
+        List<List<String>> evenings = List.of(List.of("10:00", "23:00"));
+        partyPolicy.define(true, 60, 60, 300, OpeningHours.parse(Map.of("MON", evenings, "TUE", evenings,
+                        "WED", evenings, "THU", evenings, "FRI", evenings, "SAT", evenings, "SUN", evenings)),
+                60, 2, 24, "Quiet after 22:00. Leave the room as you found it; the cleaning kit is in the cupboard.");
+        bookingPolicies.save(partyPolicy);
+        bookings.save(new Booking(a, partyRoom.getId(), tenantM.getId(), tenant.getId(), unit2B.getId(),
+                at(today.plusDays(3), 18, zone), at(today.plusDays(3), 21, zone), "Birthday dinner, about 12 people"));
+        Booking confirmed = new Booking(a, partyRoom.getId(), owner2M.getId(), owner2.getId(), duplex.getId(),
+                at(today.plusDays(6), 15, zone), at(today.plusDays(6), 18, zone), "Kids' party");
+        confirmed.approve(admin.getId(), "Enjoy!", now);
+        bookings.save(confirmed);
 
         // ---------- Small self-managed building ----------
         Building patio = buildings.save(new Building("Casa do Pátio", "Travessa do Sol 3, Porto", GovernanceMode.OPEN));
@@ -281,7 +354,8 @@ public class DevDataSeeder implements ApplicationRunner {
         memberships.save(new Membership(patio, owner, Role.OWNER, flatG, null));
 
         log.info("Seeded demo data: users admin|manager|owner|tenant|owner2|former@demo.test, password '{}'; "
-                + "invite codes TENANT22, SHARE4AB, GUEST777; 7 sample issues", PASSWORD);
+                + "invite codes TENANT22, SHARE4AB, GUEST777; 7 sample issues, 3 maintenance plans (1 overdue task), "
+                + "6 costs, a bookable party room with 2 bookings", PASSWORD);
     }
 
     private static final UUID LIGHT_FLICKERING = UUID.fromString("00000000-0000-0000-0001-000000000002");
@@ -299,6 +373,42 @@ public class DevDataSeeder implements ApplicationRunner {
         issueAffected.save(new IssueAffected(issue.getId(), reporter.getId(), IssueAffected.Kind.REPORTER, at));
         issueEvents.save(IssueEvent.of(issue, reporter.getId(), IssueEventType.REPORTED, null, at));
         return issue;
+    }
+
+    private MaintenancePlan plan(Building building, User by, UUID assetId, UUID spaceId, String title,
+            List<String> checklist, Recurrence recurrence, LocalDate startsOn, String assigneeNote) {
+        MaintenancePlan plan = new MaintenancePlan(building.getId(), by.getId());
+        plan.define(assetId, spaceId, title, null, checklist, recurrence.normalized(startsOn), startsOn, null, 7,
+                assigneeNote);
+        plan.scheduleFrom(startsOn);
+        return plans.save(plan);
+    }
+
+    /** The plan's first occurrence as a task (what MaintenanceService would have generated), then advance it. */
+    private Issue scheduledTask(Building building, MaintenancePlan plan, Asset asset, Map<UUID, Space> spaceIndex,
+            User by, Instant now) {
+        Space space = spaceIndex.get(asset.getSpaceId());
+        Issue task = issues.save(Issue.scheduled(building.getId(), building.nextIssueNumber(), asset.getId(),
+                space.getId(), SpaceService.pathLabel(space, spaceIndex), plan.getTitle(),
+                SpaceService.effectiveVisibility(space, spaceIndex), by.getId(), plan.getId(), plan.getNextDueOn(),
+                now.minus(Duration.ofDays(12))));
+        issueAffected.save(new IssueAffected(task.getId(), by.getId(), IssueAffected.Kind.REPORTER, task.getCreatedAt()));
+        issueEvents.save(IssueEvent.of(task, by.getId(), IssueEventType.REPORTED,
+                "Scheduled maintenance, due " + plan.getNextDueOn(), task.getCreatedAt()));
+        plan.advance();
+        return task;
+    }
+
+    private static CostEntry cost(Building building, User by, String amount, LocalDate on, CostEntry.Category category,
+            String description, String vendor, UUID issueId, UUID planId, UUID assetId, UUID spaceId) {
+        CostEntry entry = new CostEntry(building.getId(), by.getId());
+        entry.define(Money.parse(amount, "EUR"), on, category, description, vendor, issueId, planId, assetId,
+                spaceId);
+        return entry;
+    }
+
+    private static Instant at(LocalDate day, int hour, ZoneId zone) {
+        return day.atTime(hour, 0).atZone(zone).toInstant();
     }
 
     private void meToo(Issue issue, User user, Instant at) {

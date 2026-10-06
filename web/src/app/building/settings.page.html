@@ -21,6 +21,39 @@
       </label>
     </div>
 
+    <div class="grid-2">
+      <label class="field">
+        <span>Time zone <small class="muted">(maintenance dates and booking hours use it)</small></span>
+        <select formControlName="timeZone">
+          @if (!timeZones.includes(form.controls.timeZone.value)) {
+            <option [value]="form.controls.timeZone.value">{{ form.controls.timeZone.value }}</option>
+          }
+          @for (z of timeZones; track z) {
+            <option [value]="z">{{ z.replace('_', ' ') }}</option>
+          }
+        </select>
+        @if (zoneValue() && zoneValue() !== browserZone) {
+          <small class="muted">Your browser is in {{ browserZone }}; times in this building are shown in {{ zoneValue() }}.</small>
+        }
+        <app-field-error [control]="form.controls.timeZone" label="Time zone" />
+      </label>
+      <label class="field">
+        <span>Default currency <small class="muted">(pre-fills new costs; each cost keeps its own)</small></span>
+        <div class="row gap">
+          <select [value]="currencies.includes(form.controls.currency.value) ? form.controls.currency.value : 'OTHER'" [disabled]="!canEdit()" (change)="pickCurrency($any($event.target).value)" aria-label="Currency">
+            @for (c of currencies; track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+            <option value="OTHER">Other…</option>
+          </select>
+          @if (!currencies.includes(form.controls.currency.value)) {
+            <input type="text" class="input-narrow code-input" formControlName="currency" maxlength="3" placeholder="JPY" aria-label="Other currency code" />
+          }
+        </div>
+        <app-field-error [control]="form.controls.currency" label="Currency" />
+      </label>
+    </div>
+
     <fieldset class="field">
       <legend>Governance mode</legend>
       <div class="mode-options">

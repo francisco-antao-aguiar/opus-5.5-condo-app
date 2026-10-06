@@ -11,11 +11,12 @@ import { ASSET_NAME_MAX, ASSET_NOTES_MAX, SpaceOption, assetTypeIcon, prefillNam
 import { FieldErrorComponent } from '../shared/field-error.component';
 import { ModalComponent } from '../shared/modal.component';
 import { QrPreviewComponent } from '../shared/qr-preview.component';
+import { CostsPanelComponent } from './costs-panel.component';
 
 /** Create or edit one asset. Archive/restore live here too for existing assets. */
 @Component({
   selector: 'app-asset-dialog',
-  imports: [ReactiveFormsModule, RouterLink, ModalComponent, FieldErrorComponent, QrPreviewComponent],
+  imports: [ReactiveFormsModule, RouterLink, ModalComponent, FieldErrorComponent, QrPreviewComponent, CostsPanelComponent],
   template: `
     <app-modal [title]="asset() ? 'Edit asset' : 'Add asset'" [wide]="true" (closed)="closed.emit()">
       @if (isArchived()) {
@@ -81,6 +82,11 @@ import { QrPreviewComponent } from '../shared/qr-preview.component';
         </div>
 
         @if (current(); as cur) {
+          @if (showCosts()) {
+            <div class="field">
+              <app-costs-panel [buildingId]="buildingId()" [anchors]="{ assetId: cur.id }" [canManage]="canManageCosts()" [defaultCurrency]="defaultCurrency()" [today]="today()" />
+            </div>
+          }
           @if (!cur.archived) {
             <details class="qr-details">
               <summary>QR code for this item</summary>
@@ -132,6 +138,10 @@ export class AssetDialogComponent implements OnInit {
   readonly asset = input<AssetDto | null>(null);
   readonly initialSpaceId = input<UUID | null>(null);
   readonly canArchive = input(false);
+  readonly showCosts = input(false);
+  readonly canManageCosts = input(false);
+  readonly defaultCurrency = input('EUR');
+  readonly today = input('');
 
   readonly closed = output<void>();
   /** Created, updated, archived or restored: the parent reloads its list. */

@@ -39,13 +39,15 @@ public class IssueViews {
     private final IssueEventRepository events;
     private final IssueRepository issues;
     private final IssueAffectedRepository affected;
+    private final com.condo.building.BuildingRepository buildings;
     private final SignedUrls signedUrls;
     private final AppProperties props;
     private final Clock clock;
 
     public IssueViews(AssetRepository assets, ProblemTypeRepository problemTypes, UserRepository users,
             IssuePhotoRepository photos, IssueEventRepository events, IssueRepository issues,
-            IssueAffectedRepository affected, SignedUrls signedUrls, AppProperties props, Clock clock) {
+            IssueAffectedRepository affected, com.condo.building.BuildingRepository buildings, SignedUrls signedUrls,
+            AppProperties props, Clock clock) {
         this.assets = assets;
         this.problemTypes = problemTypes;
         this.users = users;
@@ -53,6 +55,7 @@ public class IssueViews {
         this.events = events;
         this.issues = issues;
         this.affected = affected;
+        this.buildings = buildings;
         this.signedUrls = signedUrls;
         this.props = props;
         this.clock = clock;
@@ -103,7 +106,8 @@ public class IssueViews {
                 s.sharedWithAdmins(), s.assetId(), s.assetName(), s.assetType(), s.spaceId(), s.locationLabel(),
                 s.problemTypeId(), s.otherText(), s.affectedCount(), s.photoCount(), s.reportedByName(), s.createdAt(),
                 s.statusChangedAt(), s.lastActivityAt(), s.affectedByMe(), s.stuck(), s.mergedIntoId(),
-                issue.getNote(), eventDtos, photoDtos, me, s.version());
+                issue.getNote(), eventDtos, photoDtos, me, s.version(), s.kind(), s.maintenancePlanId(), s.dueOn(),
+                s.overdue());
     }
 
     public IssuePhotoDto photo(IssuePhoto p, String uploaderName, boolean canDelete) {
@@ -127,8 +131,9 @@ public class IssueViews {
         return issue.getOtherText() != null ? issue.getOtherText() : "Problem";
     }
 
+    /** Residents' reports only; scheduled tasks have due dates and become "overdue" instead. */
     public boolean isStuck(Issue issue, Instant now) {
-        return issue.getStatus() == IssueStatus.REPORTED && !issue.isMerged()
+        return !issue.isScheduled() && issue.getStatus() == IssueStatus.REPORTED && !issue.isMerged()
                 && issue.getStatusChangedAt().plus(props.issues().stuckAfter()).isBefore(now);
     }
 
@@ -142,7 +147,8 @@ public class IssueViews {
                 i.getSpaceId(), i.getLocationLabel(), i.getProblemTypeId(), i.getOtherText(), i.getAffectedCount(),
                 photoCount, names.user(i.getReporterUserId()), i.getCreatedAt(), i.getStatusChangedAt(),
                 i.getLastActivityAt(), affectedByMe, isStuck(i, clock.instant()), i.getMergedIntoId(),
-                i.getVersion() != null ? i.getVersion() : 0L);
+                i.getVersion() != null ? i.getVersion() : 0L, i.getKind(), i.getMaintenancePlanId(), i.getDueOn(),
+                i.isOverdueOn(names.today(i.getBuildingId())));
     }
 
     private Map<UUID, Long> photoCounts(Collection<Issue> list) {
@@ -173,18 +179,33 @@ public class IssueViews {
                 problemIds.add(i.getProblemTypeId());
             }
         }
+        Map<UUID, java.time.LocalDate> today = new HashMap<>();
+        list.stream().map(Issue::getBuildingId).distinct().forEach(b -> today.put(b, today(b)));
         return new Names(
                 users.findAllById(userIds).stream().collect(Collectors.toMap(User::getId, User::getDisplayName)),
                 assets.findAllById(assetIds).stream().collect(Collectors.toMap(Asset::getId, Function.identity())),
                 problemTypes.findAllById(problemIds).stream()
-                        .collect(Collectors.toMap(ProblemType::getId, Function.identity())));
+                        .collect(Collectors.toMap(ProblemType::getId, Function.identity())),
+                today);
     }
 
-    private record Names(Map<UUID, String> users, Map<UUID, Asset> assets, Map<UUID, ProblemType> problemTypes) {
+    private record Names(Map<UUID, String> users, Map<UUID, Asset> assets, Map<UUID, ProblemType> problemTypes,
+            Map<UUID, java.time.LocalDate> todayByBuilding) {
 
         String user(UUID id) {
             return users.getOrDefault(id, "Former member");
         }
+
+        java.time.LocalDate today(UUID buildingId) {
+            return todayByBuilding.get(buildingId);
+        }
+    }
+
+    /** Today's local date in the building's time zone (due dates and "overdue" are local). */
+    public java.time.LocalDate today(UUID buildingId) {
+        return buildings.findById(buildingId)
+                .map(b -> java.time.LocalDate.now(clock.withZone(b.zone())))
+                .orElse(java.time.LocalDate.now(clock));
     }
 
     /** For callers mapping spaces; kept here so all issue presentation lives in one place. */
