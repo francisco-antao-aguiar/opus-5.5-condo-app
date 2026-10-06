@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.hibernate.annotations.OptimisticLock;
 
@@ -81,6 +82,21 @@ public class Issue extends BaseEntity {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private IssueKind kind = IssueKind.REPORTED;
+
+    @Column(name = "maintenance_plan_id")
+    private UUID maintenancePlanId;
+
+    /** Scheduled tasks: local date (building time zone) it is due. */
+    @Column(name = "due_on")
+    private LocalDate dueOn;
+
+    @OptimisticLock(excluded = true)
+    @Column(name = "overdue_notified_at")
+    private Instant overdueNotifiedAt;
+
     protected Issue() {
     }
 
@@ -103,6 +119,32 @@ public class Issue extends BaseEntity {
         this.statusChangedAt = now;
         this.lastActivityAt = now;
         setCreatedAt(now);
+    }
+
+    /**
+     * A maintenance plan's occurrence. The plan's title is kept in {@code otherText} as the task's title snapshot
+     * (without a normalized form, so it never takes part in duplicate detection or the "Other" review).
+     */
+    public static Issue scheduled(UUID buildingId, int number, UUID assetId, UUID spaceId, String locationLabel,
+            String title, Visibility visibility, UUID creatorUserId, UUID planId, LocalDate dueOn, Instant now) {
+        Issue issue = new Issue(buildingId, number, assetId, spaceId, locationLabel, null, title, null, null,
+                visibility, false, creatorUserId, null, now);
+        issue.kind = IssueKind.SCHEDULED;
+        issue.maintenancePlanId = planId;
+        issue.dueOn = dueOn;
+        return issue;
+    }
+
+    public boolean isScheduled() {
+        return kind == IssueKind.SCHEDULED;
+    }
+
+    public boolean isOverdueOn(LocalDate today) {
+        return isScheduled() && isOpen() && dueOn != null && dueOn.isBefore(today);
+    }
+
+    public void markOverdueNotified(Instant now) {
+        overdueNotifiedAt = now;
     }
 
     public boolean isMerged() {
@@ -223,5 +265,21 @@ public class Issue extends BaseEntity {
 
     public Instant getResolvedAt() {
         return resolvedAt;
+    }
+
+    public IssueKind getKind() {
+        return kind;
+    }
+
+    public UUID getMaintenancePlanId() {
+        return maintenancePlanId;
+    }
+
+    public LocalDate getDueOn() {
+        return dueOn;
+    }
+
+    public Instant getOverdueNotifiedAt() {
+        return overdueNotifiedAt;
     }
 }

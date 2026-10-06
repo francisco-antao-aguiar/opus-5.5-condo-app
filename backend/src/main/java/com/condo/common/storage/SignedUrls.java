@@ -37,7 +37,12 @@ public class SignedUrls {
     }
 
     public Signature sign(String resourceId) {
-        long exp = clock.instant().plus(TTL).getEpochSecond();
+        return sign(resourceId, TTL);
+    }
+
+    /** Longer-lived links, e.g. a calendar subscription that calendar apps poll for months. */
+    public Signature sign(String resourceId, Duration ttl) {
+        long exp = clock.instant().plus(ttl).getEpochSecond();
         return new Signature(exp, hmac(resourceId + ":" + exp));
     }
 

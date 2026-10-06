@@ -18,6 +18,10 @@
           <span class="stat-label">{{ statusLabel(s) }}</span>
         </button>
       }
+      <button type="button" class="stat" [class.stat-alert]="d.overdue.length > 0" (click)="setKind('SCHEDULED')" title="Open maintenance tasks due in the next 7 days">
+        <span class="stat-value">{{ d.dueThisWeek }}</span>
+        <span class="stat-label">🛠 Due this week</span>
+      </button>
       @if (canReviewOther()) {
         <a class="stat" [routerLink]="['/buildings', ctx.buildingId(), 'catalog', 'other']">
           <span class="stat-value">{{ d.otherTextGroups }}</span>
@@ -35,6 +39,17 @@
           </a>
         } @empty {
           <p class="muted small">Nothing waiting too long. 👍</p>
+        }
+      </div>
+      <div class="card dash-card" [class.dash-alert]="d.overdue.length > 0">
+        <h2>🛠 Overdue maintenance</h2>
+        @for (i of d.overdue; track i.id) {
+          <a class="dash-line" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
+            <span><strong>#{{ i.number }}</strong> {{ i.title }}</span>
+            <span class="muted small">{{ i.assetName ?? i.locationLabel }} · due {{ dueDate(i.dueOn) }}</span>
+          </a>
+        } @empty {
+          <p class="muted small">All maintenance is on schedule.</p>
         }
       </div>
       <div class="card dash-card">
@@ -72,6 +87,14 @@
       </select>
     </label>
   }
+  <label>
+    <span class="sr-only">Kind</span>
+    <select [value]="kindFilter()" (change)="setKind($any($event.target).value)" aria-label="Kind filter">
+      <option value="" [selected]="!kindFilter()">All kinds</option>
+      <option value="REPORTED" [selected]="kindFilter() === 'REPORTED'">Reported problems</option>
+      <option value="SCHEDULED" [selected]="kindFilter() === 'SCHEDULED'">🛠 Maintenance</option>
+    </select>
+  </label>
   @if (space() || asset()) {
     <span class="chip">
       Filtered to {{ asset() ? 'one asset' : filterSpaceName() }}
@@ -105,19 +128,25 @@
           <p class="muted small">Latest 20</p>
         }
         @for (i of board()[s]; track i.id) {
-          <a class="board-card" [class.stuck]="i.stuck" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
+          <a class="board-card" [class.stuck]="i.stuck || i.overdue" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
             <div class="row gap">
+              @if (i.kind === 'SCHEDULED') {
+                <span title="Scheduled maintenance">🛠</span>
+              }
               <strong>#{{ i.number }}</strong>
               <span class="grow">{{ i.title }}</span>
               @if (i.affectedCount > 1) {
                 <span class="badge badge-info" [title]="i.affectedCount + ' people affected'">{{ i.affectedCount }} 🙋</span>
               }
             </div>
-            <div class="muted small">{{ icon(i.assetType) }} {{ i.assetName ?? 'Something else' }} · {{ i.locationLabel }}</div>
+            <div class="muted small">{{ icon(i.assetType) }} {{ i.assetName ?? (i.kind === 'SCHEDULED' ? '' : 'Something else · ') }}{{ i.assetName ? ' · ' : '' }}{{ i.locationLabel }}</div>
             <div class="row gap wrap board-meta">
               <span class="muted small">{{ age(i.createdAt) }}</span>
               @if (i.stuck) {
                 <span class="badge badge-danger">stuck</span>
+              }
+              @if (i.dueOn) {
+                <span class="badge" [class.badge-danger]="i.overdue">{{ i.overdue ? 'OVERDUE · ' : '' }}due {{ dueDate(i.dueOn) }}</span>
               }
               @if (i.visibility === 'PRIVATE') {
                 <span class="badge badge-private">private · shared</span>
@@ -140,18 +169,27 @@
 } @else {
   <div class="issue-list" [class.busy]="loading()">
     @for (i of items(); track i.id) {
-      <a class="issue-row card" [class.stuck]="i.stuck" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
+      <a class="issue-row card" [class.stuck]="i.stuck || i.overdue" [routerLink]="['/buildings', ctx.buildingId(), 'issues', i.id]">
         <div class="issue-main">
           <div class="row gap wrap">
+            @if (i.kind === 'SCHEDULED') {
+              <span class="badge badge-info" title="Scheduled maintenance task">🛠 Maintenance</span>
+            }
             <span class="issue-num">#{{ i.number }}</span>
             <strong>{{ i.title }}</strong>
             <span [class]="'badge ' + badge[i.status]">{{ statusLabel(i.status) }}</span>
             @if (i.stuck) {
               <span class="badge badge-danger" title="Waiting in Reported for too long">STUCK</span>
             }
+            @if (i.overdue) {
+              <span class="badge badge-danger" title="Past its due date and still open">OVERDUE</span>
+            }
+            @if (i.dueOn) {
+              <span class="muted small">due {{ dueDate(i.dueOn) }}</span>
+            }
           </div>
           <div class="muted small">
-            <span aria-hidden="true">{{ icon(i.assetType) }}</span> {{ i.assetName ?? 'Something else' }} · {{ i.locationLabel }}
+            <span aria-hidden="true">{{ icon(i.assetType) }}</span> {{ i.assetName ?? (i.kind === 'SCHEDULED' ? '' : 'Something else · ') }}{{ i.assetName ? ' · ' : '' }}{{ i.locationLabel }}
           </div>
         </div>
         <div class="issue-side">

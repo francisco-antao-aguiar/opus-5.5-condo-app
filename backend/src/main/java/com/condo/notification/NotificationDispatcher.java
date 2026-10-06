@@ -24,6 +24,18 @@ class NotificationDispatcher {
         this.executor = executor;
     }
 
+    /** Generic requests from bookings, maintenance… — also only after commit. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    void on(NotificationRequest request) {
+        executor.execute(() -> {
+            try {
+                notificationService.deliver(request);
+            } catch (RuntimeException e) {
+                log.error("Delivering {} notification failed", request.type(), e);
+            }
+        });
+    }
+
     /** Only after commit: nobody is told about a change that was rolled back. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     void on(IssueActivity activity) {

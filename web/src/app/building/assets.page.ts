@@ -8,6 +8,7 @@ import { allowedSpaceIds, assetQuery, assetSpaceTargets, assetTypeIcon, spacesIn
 import { ModalComponent } from '../shared/modal.component';
 import { idsToParam, selectionState, toggleAllVisible, toggleSelected } from '../shared/qr';
 import { QrPreviewComponent } from '../shared/qr-preview.component';
+import { todayIn } from '../shared/zoned';
 import { AssetDialogComponent } from './asset-dialog.component';
 import { BuildingContext } from './building-context.service';
 import { BulkAssetsDialogComponent } from './bulk-assets-dialog.component';
@@ -46,6 +47,7 @@ export class AssetsPage {
   protected readonly editing = signal<AssetDto | 'new' | null>(null);
   protected readonly bulkOpen = signal(false);
   protected readonly qrFor = signal<AssetDto | null>(null);
+  protected readonly today = computed(() => todayIn(this.ctx.building()?.timeZone ?? 'Europe/Lisbon'));
 
   // label selection (kept across filter changes, so you can build a sheet from several searches)
   protected readonly selected = signal<ReadonlySet<UUID>>(new Set());

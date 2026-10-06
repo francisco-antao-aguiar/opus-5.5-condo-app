@@ -67,6 +67,17 @@ app:
     enabled: ${APP_PUSH_ENABLED:false}
     expo-url: https://exp.host/--/api/v2/push/send
     access-token: ${APP_PUSH_ACCESS_TOKEN:}
+  buildings:
+    # Defaults for new buildings; each building can change them in its settings.
+    default-time-zone: Europe/Lisbon
+    default-currency: EUR
+  bookings:
+    # Admins get one reminder about a request still pending after this long.
+    review-reminder-after: 48h
+    jobs-cron: "0 */10 * * * *"
+  maintenance:
+    # Generates due maintenance tasks (and flags overdue ones) for every building, in its own time zone.
+    jobs-cron: "0 5 * * * *"
   memberships:
     # Flips ACTIVE memberships past their end date to EXPIRED. Access is already cut at check time.
     expiry-cron: "0 */15 * * * *"

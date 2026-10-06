@@ -4,7 +4,24 @@ import type {
   AssetDto,
   AssetQuery,
   AssetTypeDto,
+  Availability,
+  BookingDecisionRequest,
+  BookingDto,
+  BookingPolicyDto,
+  BookingQuery,
   BulkCreateAssetsRequest,
+  CalendarLink,
+  CostEntryDto,
+  CostGroupBy,
+  CostQuery,
+  CostSummary,
+  CreateBookingRequest,
+  MaintenancePlanDto,
+  RecurrencePreview,
+  RecurrencePreviewRequest,
+  SaveBookingPolicyRequest,
+  SaveCostEntryRequest,
+  SaveMaintenancePlanRequest,
   ChangeIssueStatusRequest,
   CommentRequest,
   IssueDashboard,
@@ -199,6 +216,19 @@ export function createApiClient(config: ApiClientConfig) {
     return parse<T>(res);
   }
 
+  /** Authenticated GET returning text (CSV exports). */
+  async function requestText(path: string): Promise<string> {
+    const tokens = await config.tokenStore.get();
+    let res = await raw('GET', path, undefined, tokens?.accessToken ?? null);
+    if (res.status === 401 && tokens) {
+      const renewed = await refresh();
+      if (!renewed) config.onSessionExpired?.();
+      else res = await raw('GET', path, undefined, renewed.accessToken);
+    }
+    if (!res.ok) return parse<string>(res);
+    return res.text();
+  }
+
   async function publicPost<T>(path: string, body: unknown): Promise<T> {
     return parse<T>(await raw('POST', path, body, null));
   }
@@ -295,6 +325,71 @@ export function createApiClient(config: ApiClientConfig) {
         request<void>('DELETE', `${b(buildingId)}/assets/${assetId}`),
       restore: (buildingId: UUID, assetId: UUID) =>
         request<AssetDto>('POST', `${b(buildingId)}/assets/${assetId}/restore`),
+    },
+
+    maintenance: {
+      list: (buildingId: UUID) => request<MaintenancePlanDto[]>('GET', `${b(buildingId)}/maintenance-plans`),
+      get: (buildingId: UUID, planId: UUID) =>
+        request<MaintenancePlanDto>('GET', `${b(buildingId)}/maintenance-plans/${planId}`),
+      create: (buildingId: UUID, req: SaveMaintenancePlanRequest) =>
+        request<MaintenancePlanDto>('POST', `${b(buildingId)}/maintenance-plans`, req),
+      update: (buildingId: UUID, planId: UUID, req: SaveMaintenancePlanRequest) =>
+        request<MaintenancePlanDto>('PUT', `${b(buildingId)}/maintenance-plans/${planId}`, req),
+      pause: (buildingId: UUID, planId: UUID) =>
+        request<MaintenancePlanDto>('POST', `${b(buildingId)}/maintenance-plans/${planId}/pause`),
+      resume: (buildingId: UUID, planId: UUID) =>
+        request<MaintenancePlanDto>('POST', `${b(buildingId)}/maintenance-plans/${planId}/resume`),
+      /** Next dates for a recurrence, for the plan form (no plan needed). */
+      preview: (buildingId: UUID, req: RecurrencePreviewRequest) =>
+        request<RecurrencePreview>('POST', `${b(buildingId)}/maintenance-plans/preview`, req),
+    },
+
+    costs: {
+      list: (buildingId: UUID, query: CostQuery = {}) =>
+        request<Page<CostEntryDto>>('GET', `${b(buildingId)}/costs${toQueryString(query)}`),
+      get: (buildingId: UUID, costId: UUID) => request<CostEntryDto>('GET', `${b(buildingId)}/costs/${costId}`),
+      create: (buildingId: UUID, req: SaveCostEntryRequest) =>
+        request<CostEntryDto>('POST', `${b(buildingId)}/costs`, req),
+      update: (buildingId: UUID, costId: UUID, req: SaveCostEntryRequest) =>
+        request<CostEntryDto>('PUT', `${b(buildingId)}/costs/${costId}`, req),
+      /** Soft delete; the reason is kept for the audit trail. */
+      remove: (buildingId: UUID, costId: UUID, reason: string) =>
+        request<void>('DELETE', `${b(buildingId)}/costs/${costId}${toQueryString({ reason })}`),
+      /** Multipart field "file": image or PDF, max 10 MB. Replaces any previous receipt. */
+      uploadReceipt: (buildingId: UUID, costId: UUID, form: FormData) =>
+        request<CostEntryDto>('POST', `${b(buildingId)}/costs/${costId}/receipt`, form),
+      summary: (buildingId: UUID, groupBy: CostGroupBy, query: Omit<CostQuery, 'page' | 'size'> = {}) =>
+        request<CostSummary>('GET', `${b(buildingId)}/costs/summary${toQueryString({ ...query, groupBy })}`),
+      /** CSV text for the accountant. */
+      exportCsv: (buildingId: UUID, query: Pick<CostQuery, 'from' | 'to'> = {}) =>
+        requestText(`${b(buildingId)}/costs/export.csv${toQueryString(query)}`),
+    },
+
+    bookings: {
+      bookableSpaces: (buildingId: UUID) => request<BookingPolicyDto[]>('GET', `${b(buildingId)}/bookable-spaces`),
+      /** 404 when the space isn't bookable. */
+      getPolicy: (buildingId: UUID, spaceId: UUID) =>
+        request<BookingPolicyDto>('GET', `${b(buildingId)}/spaces/${spaceId}/booking-policy`),
+      savePolicy: (buildingId: UUID, spaceId: UUID, req: SaveBookingPolicyRequest) =>
+        request<BookingPolicyDto>('PUT', `${b(buildingId)}/spaces/${spaceId}/booking-policy`, req),
+      availability: (buildingId: UUID, spaceId: UUID, from: string, to: string) =>
+        request<Availability>(
+          'GET',
+          `${b(buildingId)}/spaces/${spaceId}/availability${toQueryString({ from, to })}`,
+        ),
+      list: (buildingId: UUID, query: BookingQuery = {}) =>
+        request<BookingDto[]>('GET', `${b(buildingId)}/bookings${toQueryString(query)}`),
+      get: (buildingId: UUID, bookingId: UUID) =>
+        request<BookingDto>('GET', `${b(buildingId)}/bookings/${bookingId}`),
+      request: (buildingId: UUID, req: CreateBookingRequest) =>
+        request<BookingDto>('POST', `${b(buildingId)}/bookings`, req),
+      approve: (buildingId: UUID, bookingId: UUID, req: BookingDecisionRequest = {}) =>
+        request<BookingDto>('POST', `${b(buildingId)}/bookings/${bookingId}/approve`, req),
+      reject: (buildingId: UUID, bookingId: UUID, req: BookingDecisionRequest = {}) =>
+        request<BookingDto>('POST', `${b(buildingId)}/bookings/${bookingId}/reject`, req),
+      cancel: (buildingId: UUID, bookingId: UUID, req: BookingDecisionRequest = {}) =>
+        request<BookingDto>('POST', `${b(buildingId)}/bookings/${bookingId}/cancel`, req),
+      calendarLink: () => request<CalendarLink>('GET', '/me/bookings/calendar-link'),
     },
 
     qr: {

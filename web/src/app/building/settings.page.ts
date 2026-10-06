@@ -8,7 +8,9 @@ import { ConfirmService } from '../core/confirm.service';
 import { applyServerErrors, CONFLICT_RELOADED, describeError, ErrorText, isConflict } from '../core/errors';
 import { ToastService } from '../core/toast.service';
 import { FieldErrorComponent } from '../shared/field-error.component';
+import { COMMON_CURRENCIES, isValidCurrency } from '../shared/money';
 import { ACTION_LABELS, buildPolicyMatrix } from '../shared/policy';
+import { browserTimeZone, isValidTimeZone, supportedTimeZones } from '../shared/zoned';
 import { BuildingContext } from './building-context.service';
 
 @Component({
@@ -34,7 +36,18 @@ export class SettingsPage implements OnInit {
     name: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(200)] }),
     address: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(500)] }),
     governanceMode: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    timeZone: new FormControl('Europe/Lisbon', { nonNullable: true, validators: [Validators.required, (c) => (isValidTimeZone(c.value) ? null : { server: 'Unknown time zone.' })] }),
+    currency: new FormControl('EUR', {
+      nonNullable: true,
+      validators: [Validators.required, (c) => (isValidCurrency(String(c.value).toUpperCase()) ? null : { server: 'Use a 3-letter ISO currency code, e.g. EUR.' })],
+    }),
   });
+
+  protected readonly timeZones = supportedTimeZones();
+  protected readonly currencies = COMMON_CURRENCIES;
+  protected readonly browserZone = browserTimeZone();
+  protected readonly zoneValue = toSignal(this.form.controls.timeZone.valueChanges, { initialValue: '' });
+  protected readonly currencyValue = toSignal(this.form.controls.currency.valueChanges, { initialValue: '' });
 
   protected readonly canEdit = computed(() => this.ctx.can('BUILDING_SETTINGS'));
   protected readonly selectedMode = toSignal(this.form.controls.governanceMode.valueChanges, { initialValue: '' });
@@ -65,7 +78,7 @@ export class SettingsPage implements OnInit {
       const b = this.ctx.building();
       if (!b) return;
       untracked(() => {
-        this.form.reset({ name: b.name, address: b.address ?? '', governanceMode: b.governanceMode });
+        this.form.reset({ name: b.name, address: b.address ?? '', governanceMode: b.governanceMode, timeZone: b.timeZone ?? 'Europe/Lisbon', currency: b.currency ?? 'EUR' });
         if (this.canEdit()) this.form.enable();
         else this.form.disable();
       });
@@ -80,6 +93,12 @@ export class SettingsPage implements OnInit {
       },
       (e) => this.loadError.set(describeError(e)),
     );
+  }
+
+  protected pickCurrency(code: string): void {
+    const c = this.form.controls.currency;
+    c.setValue(code === 'OTHER' ? '' : code);
+    c.markAsDirty();
   }
 
   protected cellText(mode: string, action: Action, role: RoleCode): string {
@@ -117,6 +136,8 @@ export class SettingsPage implements OnInit {
         name: v.name.trim(),
         address: v.address.trim() || null,
         governanceMode: v.governanceMode,
+        timeZone: v.timeZone,
+        currency: v.currency.trim().toUpperCase(),
         version: b.version,
       });
       this.ctx.building.set(updated);

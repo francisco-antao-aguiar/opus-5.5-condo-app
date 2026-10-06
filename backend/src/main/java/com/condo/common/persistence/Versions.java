@@ -15,7 +15,12 @@ public final class Versions {
 
     /** No-op when the client didn't send a version (older clients keep last-write-wins). */
     public static void requireCurrent(Long expected, BaseEntity entity) {
-        if (expected != null && !Objects.equals(expected, entity.getVersion())) {
+        requireCurrent(expected, entity.getVersion());
+    }
+
+    /** For entities with their own key that don't extend BaseEntity. A new (unsaved) entity has no version. */
+    public static void requireCurrent(Long expected, Long current) {
+        if (expected != null && current != null && !Objects.equals(expected, current)) {
             throw ApiException.conflict(ErrorCodes.CONFLICT,
                     "Someone else changed this in the meantime. Reload and try again.");
         }

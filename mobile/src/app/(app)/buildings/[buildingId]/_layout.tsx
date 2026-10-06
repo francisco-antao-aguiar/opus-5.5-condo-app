@@ -16,6 +16,11 @@ export default function BuildingLayout() {
       <Stack.Screen name="issues/index" options={{ title: 'Issues' }} />
       {/* Deep-link target for phase 5 push notifications: buildingapp://buildings/{b}/issues/{id} */}
       <Stack.Screen name="issues/[issueId]" options={{ title: '' }} />
+      <Stack.Screen name="bookings/index" options={{ title: 'Bookings' }} />
+      <Stack.Screen name="bookings/new" options={{ title: 'Book a space' }} />
+      {/* Target of BOOKING_* notifications: /buildings/{b}/bookings/{id} */}
+      <Stack.Screen name="bookings/[bookingId]" options={{ title: 'Booking' }} />
+      <Stack.Screen name="costs/new" options={{ title: 'Add cost', presentation: 'modal' }} />
     </Stack>
   );
 }

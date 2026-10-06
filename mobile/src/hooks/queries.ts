@@ -4,6 +4,11 @@ import {
   type AssetDto,
   type ChangeIssueStatusRequest,
   type IssueDto,
+  type IssueKind,
+  type BookingDto,
+  type CreateBookingRequest,
+  type SaveCostEntryRequest,
+  type LocalDate,
   type CreateAssetRequest,
   type CreateBuildingRequest,
   type CreateInvitationRequest,
@@ -314,11 +319,17 @@ export type IssueStatusFilter = 'open' | 'all';
 const ISSUE_PAGE = 30;
 
 /** Paged list, newest activity first. */
-export function useIssueList(buildingId: UUID, view: IssueListView, status: IssueStatusFilter, enabled = true) {
+export function useIssueList(
+  buildingId: UUID,
+  view: IssueListView,
+  status: IssueStatusFilter,
+  enabled = true,
+  kind?: IssueKind,
+) {
   return useInfiniteQuery({
-    queryKey: queryKeys.issueList(buildingId, view, status),
+    queryKey: [...queryKeys.issueList(buildingId, view, status), kind ?? 'any'],
     queryFn: ({ pageParam }) =>
-      api.issues.list(buildingId, { view, status, sort: 'recent', page: pageParam, size: ISSUE_PAGE }),
+      api.issues.list(buildingId, { view, status, kind, sort: 'recent', page: pageParam, size: ISSUE_PAGE }),
     initialPageParam: 0,
     getNextPageParam: (last) => ((last.page + 1) * last.size < last.total ? last.page + 1 : undefined),
     enabled,
@@ -436,5 +447,110 @@ export function useMarkAllNotificationsRead() {
   return useMutation({
     mutationFn: () => api.notifications.markAllRead(),
     onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.notifications }),
+  });
+}
+
+// ---------- maintenance, costs, bookings (phase 6) ----------
+
+export function useMaintenancePlans(buildingId: UUID, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.maintenancePlans(buildingId),
+    queryFn: () => api.maintenance.list(buildingId),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useMaintenancePlan(buildingId: UUID, planId: UUID | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.maintenancePlan(buildingId, planId ?? ''),
+    queryFn: () => api.maintenance.get(buildingId, planId!),
+    enabled: !!planId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Cost totals (one per currency) and entry count for an issue or an asset, from the server's summary. */
+export function useCostSummary(buildingId: UUID, anchor: { issueId?: UUID; assetId?: UUID }, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.costList(buildingId, anchor.issueId ? 'issue:' + anchor.issueId : 'asset:' + anchor.assetId),
+    queryFn: async () => {
+      const summary = await api.costs.summary(buildingId, 'category', anchor);
+      return { totals: summary.totals, count: summary.rows.reduce((n, r) => n + r.count, 0) };
+    },
+    enabled,
+  });
+}
+
+export function useCreateCost(buildingId: UUID) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ req, receipt }: { req: SaveCostEntryRequest; receipt?: LocalPhoto | null }) => {
+      const cost = await api.costs.create(buildingId, req);
+      if (!receipt) return { cost, receiptError: null as unknown };
+      // The cost is saved either way; a failed receipt upload is reported, not fatal.
+      try {
+        return { cost: await api.costs.uploadReceipt(buildingId, cost.id, await photoForm(receipt)), receiptError: null as unknown };
+      } catch (e) {
+        return { cost, receiptError: e as unknown };
+      }
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.costs(buildingId) }),
+  });
+}
+
+export function useBookableSpaces(buildingId: UUID) {
+  return useQuery({ queryKey: queryKeys.bookableSpaces(buildingId), queryFn: () => api.bookings.bookableSpaces(buildingId) });
+}
+
+export function useAvailability(buildingId: UUID, spaceId: UUID, day: LocalDate, from: string, to: string) {
+  return useQuery({
+    queryKey: queryKeys.availability(buildingId, spaceId, day),
+    queryFn: () => api.bookings.availability(buildingId, spaceId, from, to),
+    staleTime: 15_000,
+  });
+}
+
+export function useMyBookings(buildingId: UUID) {
+  return useQuery({
+    queryKey: queryKeys.bookingList(buildingId, 'mine'),
+    queryFn: () => api.bookings.list(buildingId, { mine: true }),
+  });
+}
+
+export function usePendingRequests(buildingId: UUID, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.bookingList(buildingId, 'pending'),
+    queryFn: () => api.bookings.list(buildingId, { status: 'PENDING' }),
+    enabled,
+  });
+}
+
+export function useBooking(buildingId: UUID, bookingId: UUID) {
+  return useQuery({
+    queryKey: queryKeys.bookingList(buildingId, 'one:' + bookingId),
+    queryFn: () => api.bookings.get(buildingId, bookingId),
+  });
+}
+
+function useInvalidateBookings(buildingId: UUID) {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: queryKeys.bookings(buildingId) });
+}
+
+export function useRequestBooking(buildingId: UUID) {
+  const invalidate = useInvalidateBookings(buildingId);
+  return useMutation({
+    mutationFn: (req: CreateBookingRequest) => api.bookings.request(buildingId, req),
+    onSettled: invalidate,
+  });
+}
+
+export function useBookingDecision(buildingId: UUID) {
+  const invalidate = useInvalidateBookings(buildingId);
+  return useMutation({
+    mutationFn: ({ id, action, note }: { id: UUID; action: 'approve' | 'reject' | 'cancel'; note?: string | null }) =>
+      api.bookings[action](buildingId, id, { note: note || null }),
+    onSettled: invalidate,
   });
 }

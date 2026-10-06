@@ -39,6 +39,11 @@ export class BuildingContext {
   });
   readonly notFound = computed(() => errorCode(this.error()) === 'NOT_FOUND');
 
+  /** Holds `action` with any scope (for showing a whole section; per-target checks use can()). */
+  has(action: Action): boolean {
+    return !!this.perms()?.actions.some((g) => g.action === action);
+  }
+
   /** Client-side permission hint (the server re-checks). */
   can(action: Action, targetId?: UUID | null): boolean {
     return canDo(this.perms(), action, targetId, this.spaces());

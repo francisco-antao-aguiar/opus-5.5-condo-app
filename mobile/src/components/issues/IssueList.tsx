@@ -5,7 +5,7 @@ import { canDo, type MyPermissions, type UUID } from '@condo/shared';
 import { useIssueList, type IssueListView, type IssueStatusFilter } from '../../hooks/queries';
 import { spacing, useTheme } from '../../theme';
 import { Button } from '../Button';
-import { Segmented } from '../Controls';
+import { Chip, ChipGroup, Segmented } from '../Controls';
 import { EmptyView, ErrorView } from '../StateView';
 import { IssueRow } from './IssueParts';
 import { PendingReports } from './PendingReports';
@@ -42,7 +42,9 @@ export function IssueList({
   const views = viewsFor(perms);
   const [view, setView] = useState<IssueListView>('mine');
   const [status, setStatus] = useState<IssueStatusFilter>('open');
-  const query = useIssueList(buildingId, view, status);
+  const [maintenanceOnly, setMaintenanceOnly] = useState(false);
+  const kind = view === 'triage' && maintenanceOnly ? ('SCHEDULED' as const) : undefined;
+  const query = useIssueList(buildingId, view, status, true, kind);
   const [refreshing, setRefreshing] = useState(false);
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
 
@@ -72,6 +74,12 @@ export function IssueList({
           <PendingReports buildingId={buildingId} />
           {views.length > 1 ? (
             <Segmented accessibilityLabel="Which issues" options={views} value={view} onChange={setView} />
+          ) : null}
+          {view === 'triage' ? (
+            <ChipGroup>
+              <Chip label="Everything" selected={!maintenanceOnly} onPress={() => setMaintenanceOnly(false)} />
+              <Chip label="🛠 Maintenance" selected={maintenanceOnly} onPress={() => setMaintenanceOnly(true)} />
+            </ChipGroup>
           ) : null}
           <Segmented
             accessibilityLabel="Status"

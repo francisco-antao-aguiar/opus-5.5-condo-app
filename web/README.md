@@ -117,3 +117,29 @@ shared client after `shared/dist` is rebuilt (the error is "does not provide an 
   each navigation, and the tab title shows the count, e.g. "(3) Issues · Condo".
   * The dropdown lists the latest 10. Clicking one marks it read and opens its link.
   * `/notifications` lists everything, grouped by day, with paging and an "Unread only" filter.
+
+## Maintenance, costs and bookings (phase 6)
+
+* **Settings** — building time zone (maintenance dates and booking hours are local to it) and default currency.
+* **Maintenance** (`maintenance`) — recurring plans for an item or a place. The repeat builder (once / daily /
+  weekly on chosen days / monthly on a day / yearly) shows a live preview of the next 5 dates from the server.
+  * Plans can be paused and resumed.
+  * Each due date becomes a 🛠 task in Issues, with a *Kind* filter, an OVERDUE highlight, "Overdue maintenance" and
+    "Due this week" on the triage dashboard, and the plan's checklist on the task.
+* **Costs** (`costs`) — filters, a paged table, a summary by month / category / item / place with CSS bars, and CSV
+  export.
+  * Amounts are typed as text and validated against the currency's decimals. Money is never a JS number: it stays a
+    decimal string, is summed with BigInt, and is formatted with `Intl.NumberFormat`.
+  * Totals are shown per currency, side by side, never added together.
+  * Receipts (photo or PDF, up to 10 MB) are uploaded after saving. Deleting a cost asks for a reason.
+  * Issues and items show a "Costs: …" panel.
+* **Bookings** (`bookings`, `bookings/:id`) has four tabs:
+  * *Book a space* — a week calendar in the building's time zone (DST-aware); pick a free range, read the house rules,
+    and send a request.
+  * *My bookings* — your requests and bookings, with withdraw/cancel.
+  * *Approvals* — pending requests first, with how long they've waited; approve, or reject with a reason.
+  * *Bookable spaces* — the policy editor, with an opening-hours grid.
+  * "Copy calendar link" gives an .ics subscription of your confirmed bookings.
+
+Pure logic with unit tests: `shared/recurrence.ts`, `shared/money.ts`, `shared/zoned.ts` (time zones without a
+library), `shared/slots.ts` (booking grid), `shared/costs.ts`, `shared/bookings.ts`.

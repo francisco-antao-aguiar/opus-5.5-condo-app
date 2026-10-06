@@ -70,6 +70,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/invitations/*").permitAll()
                         // Photo bytes behind HMAC-signed, expiring links (checked in IssuePhotoService).
                         .requestMatchers(HttpMethod.GET, "/api/files/photos/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/files/receipts/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/files/calendar/*").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o

@@ -329,6 +329,13 @@ function BuildingHeader({ building, perms }: { building: BuildingDto; perms: MyP
         style={{ minHeight: 64 }}
       />
       <Button title="Issues" variant="secondary" onPress={() => router.push(`/buildings/${building.id}/issues`)} />
+      {canDo(perms, 'BOOKING_CREATE') || canDo(perms, 'BOOKING_MANAGE') ? (
+        <Button
+          title={canDo(perms, 'BOOKING_MANAGE') ? 'Bookings & requests' : 'Book a space'}
+          variant="secondary"
+          onPress={() => router.push(`/buildings/${building.id}/bookings`)}
+        />
+      ) : null}
       <PendingReports buildingId={building.id} />
       <Button
         title={canInvite(perms) ? 'Members & invitations' : 'Members'}

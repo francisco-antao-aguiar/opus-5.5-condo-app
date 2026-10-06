@@ -67,8 +67,9 @@ public class IssueController {
             @RequestParam(required = false) String status, @RequestParam(required = false) UUID spaceId,
             @RequestParam(required = false) UUID assetId, @RequestParam(required = false) String sort,
             @RequestParam(required = false) @Min(0) Integer page,
-            @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
-        return issueService.list(buildingId, new IssueQuery(view, status, spaceId, assetId, sort, page, size));
+            @RequestParam(required = false) @Min(1) @Max(100) Integer size,
+            @RequestParam(required = false) IssueKind kind) {
+        return issueService.list(buildingId, new IssueQuery(view, status, spaceId, assetId, sort, page, size, kind));
     }
 
     @GetMapping("/issues/dashboard")

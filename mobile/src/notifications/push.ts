@@ -188,9 +188,17 @@ export function onPushTokenChange(userId: string): () => void {
 
 // ---------- taps & foreground ----------
 
-/** Only app routes into a building are followed (data comes from the network). */
+const ID = '[0-9a-fA-F-]{36}';
+/** Routes a notification may open (data comes from the network, so only these are followed). */
+const SAFE_LINKS = [
+  new RegExp(`^/buildings/${ID}$`),
+  new RegExp(`^/buildings/${ID}/issues/${ID}$`),
+  new RegExp(`^/buildings/${ID}/bookings(/${ID})?$`),
+  new RegExp(`^/buildings/${ID}/assets/${ID}$`),
+];
+
 export function isSafeLink(link: unknown): link is string {
-  return typeof link === 'string' && /^\/buildings\/[0-9a-zA-Z/_-]+$/.test(link);
+  return typeof link === 'string' && SAFE_LINKS.some((r) => r.test(link));
 }
 
 export function openLink(link: string, signedIn: boolean) {

@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { IssueDashboard, IssueQuery, IssueStatus, IssueSummaryDto, UUID } from '@condo/shared';
+import { IssueDashboard, IssueKind, IssueQuery, IssueStatus, IssueSummaryDto, UUID } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { CONFLICT_RELOADED, describeError, ErrorText, isConflict } from '../core/errors';
 import { ToastService } from '../core/toast.service';
@@ -19,6 +19,7 @@ import {
   stuckLabel,
   transitionLabel,
 } from '../shared/issues';
+import { formatLocalDate } from '../shared/zoned';
 import { BuildingContext } from './building-context.service';
 import { TransitionDialogComponent, TransitionRequest } from './transition-dialog.component';
 
@@ -40,6 +41,8 @@ export class IssuesPage {
   readonly view = input<string>();
   readonly space = input<string>();
   readonly asset = input<string>();
+  /** ?kind=REPORTED|SCHEDULED (empty = both). */
+  readonly kind = input<string>();
 
   protected readonly tabLabels = TAB_LABELS;
   protected readonly statuses = ISSUE_STATUSES;
@@ -89,7 +92,11 @@ export class IssuesPage {
     size: PAGE_SIZE,
     ...(this.space() ? { spaceId: this.space() } : {}),
     ...(this.asset() ? { assetId: this.asset() } : {}),
+    ...(this.kindFilter() ? { kind: this.kindFilter() as IssueKind } : {}),
   }));
+
+  protected readonly kindFilter = computed<IssueKind | ''>(() => (this.kind() === 'REPORTED' || this.kind() === 'SCHEDULED' ? this.kind() as IssueKind : ''));
+  protected readonly dueDate = (d: string | null) => (d ? formatLocalDate(d, { day: 'numeric', month: 'short' }) : '');
 
   constructor() {
     effect(() => {
@@ -125,7 +132,11 @@ export class IssuesPage {
     const seq = ++this.loadSeq;
     this.loading.set(true);
     this.loadError.set(null);
-    const extra: IssueQuery = { ...(this.space() ? { spaceId: this.space() } : {}), ...(this.asset() ? { assetId: this.asset() } : {}) };
+    const extra: IssueQuery = {
+      ...(this.space() ? { spaceId: this.space() } : {}),
+      ...(this.asset() ? { assetId: this.asset() } : {}),
+      ...(this.kindFilter() ? { kind: this.kindFilter() as IssueKind } : {}),
+    };
     try {
       const c = this.api.client.issues;
       const [open, resolved] = await Promise.all([
@@ -168,6 +179,11 @@ export class IssuesPage {
   protected setStatus(s: string): void {
     this.page.set(0);
     this.status.set(s);
+  }
+
+  protected setKind(k: string): void {
+    this.page.set(0);
+    void this.router.navigate([], { queryParams: { kind: k || null }, queryParamsHandling: 'merge' });
   }
 
   protected clearPlaceFilter(): void {

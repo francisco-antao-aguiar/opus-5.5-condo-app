@@ -8,17 +8,17 @@ import java.util.Optional;
  * Identifies uploads by their magic bytes, not by the client-supplied Content-Type or file name, so a renamed
  * script can't be stored and served back as an "image".
  */
-final class ImageTypes {
+public final class ImageTypes {
 
-    record ImageType(String contentType, String extension) {
+    public record ImageType(String contentType, String extension) {
     }
 
-    static final int HEADER_BYTES = 16;
+    public static final int HEADER_BYTES = 16;
 
     private ImageTypes() {
     }
 
-    static Optional<ImageType> sniff(byte[] h) {
+    public static Optional<ImageType> sniff(byte[] h) {
         if (h.length >= 3 && (h[0] & 0xFF) == 0xFF && (h[1] & 0xFF) == 0xD8 && (h[2] & 0xFF) == 0xFF) {
             return Optional.of(new ImageType("image/jpeg", "jpg"));
         }

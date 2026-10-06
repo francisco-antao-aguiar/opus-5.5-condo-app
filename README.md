@@ -77,6 +77,13 @@ Seven sample issues show the whole lifecycle:
 | 4 | Intercom · No sound | Resolved |
 | 5 | 2B kitchen sink · Leak | **Private**: only 2B's members see it (not shared with management) |
 | 6, 7 | Roof door · "Hinge squeaks" | The same free "Other" text twice → ready to promote in the "Other" review |
+| 8 | Elevator inspection | A **scheduled maintenance task** 5 days past due → *overdue* on the dashboard |
+
+Maintenance, costs and booking (phase 6):
+
+* **Maintenance plans:** "Elevator inspection" every 6 months (its current round is overdue), "Replace stairwell bulbs" yearly (due in three weeks) and "Fire extinguisher inspection" every March.
+* **Costs:** six entries in EUR (€1,050.27): the elevator repair and intercom speaker linked to their issues, the inspection call-out linked to its plan, two months of cleaning and an electricity bill. Admins and managers edit them; owners can view them; tenants can't.
+* **Booking:** the ground-floor *Party room* can be booked 10:00–23:00 in 1-hour slots (1–5 h, at most 2 upcoming per home, cancel up to 24 h before). It has a **pending** request from Tiago (2B), waiting for an admin, and a **confirmed** booking by Rita (duplex).
 
 ## Web
 
@@ -121,4 +128,4 @@ The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To 
 3. **Asset types, assets, problem catalogs** ✅
 4. **Issue reporting, duplicate detection / "me too", lifecycle and timeline** ✅
 5. **QR codes, deep links, push notifications** ✅
-6. **Design only:** maintenance, booking, costs — see [docs/PHASE-6-DESIGN.md](docs/PHASE-6-DESIGN.md) ✅
+6. **Maintenance plans, cost tracking and admin-reviewed booking** ✅ — design in [docs/PHASE-6-DESIGN.md](docs/PHASE-6-DESIGN.md)

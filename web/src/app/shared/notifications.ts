@@ -5,6 +5,13 @@ export const NOTIFICATION_ICONS: Record<string, string> = {
   ISSUE_STATUS_CHANGED: '➜',
   ISSUE_COMMENTED: '💬',
   ISSUE_MERGED: '⤵',
+  TASK_DUE: '🛠',
+  TASK_OVERDUE: '⏰',
+  BOOKING_REQUESTED: '📅',
+  BOOKING_REVIEW_REMINDER: '⏳',
+  BOOKING_CONFIRMED: '✅',
+  BOOKING_REJECTED: '🚫',
+  BOOKING_CANCELLED: '✖',
 };
 
 export function notificationIcon(type: string): string {
