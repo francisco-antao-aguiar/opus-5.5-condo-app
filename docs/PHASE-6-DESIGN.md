@@ -1,8 +1,20 @@
 # Phase 6 — Design (not implemented)
 
-Maintenance schedules and recurring tasks, announcements, shared-space booking and cost tracking.
+Maintenance schedules and recurring tasks, shared-space booking and cost tracking.
 This document is the design only: no code ships with it. Its job is to show how each feature sits on the
 phase 1–5 model and to list the few, all additive, changes that model needs.
+
+## Decisions (2026-10-06)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Maintenance tasks: issues or a separate list? | **Issues** (`kind = SCHEDULED`) — §2 |
+| 2 | Booking approvals, payments? | **Every booking is reviewed by an admin** (`BOOKING_MANAGE`) before it's confirmed; **no payments or deposits** — §3 |
+| 3 | Announcements | **Dropped** from scope. Nothing below depends on them |
+| 4 | Costs: tracking or per-unit splitting? | **Tracking only** — no quota (*permilagem*) splitting or per-unit statements — §4 |
+| 5 | Currency and time zone | **EUR by default, future-proof**: every amount carries its own ISO 4217 currency, nothing assumes EUR — §4. Time zone defaults to Europe/Lisbon, editable per building |
+| 6 | Remind admins about booking requests waiting for review? | **Yes**, after 48 hours (configurable) — §3 |
+| 7 | Can owners see costs in Managed buildings? | **Yes**: `COST_VIEW` for OWNER stays in the Managed preset — §5 |
 
 ---
 
@@ -14,16 +26,16 @@ additive and none needing data rewrites:
 
 | # | Gap found | Why it matters | Change (when phase 6 starts) |
 |---|---|---|---|
-| 1 | `building` has no **time zone** | "Every 1st Monday at 9:00", "the party room opens at 10:00" are local times; instants alone can't express them | `ALTER TABLE building ADD time_zone VARCHAR(64) NOT NULL DEFAULT 'Europe/Lisbon'` (IANA id, editable in settings) |
-| 2 | `building` has no **currency** | Cost entries need a default currency | `ADD currency CHAR(3) NOT NULL DEFAULT 'EUR'` |
+| 1 | `building` has no **time zone** | "Every 1st Monday", "the party room opens at 10:00" are local times; instants alone can't express them | `ALTER TABLE building ADD time_zone VARCHAR(64) NOT NULL DEFAULT 'Europe/Lisbon'` (IANA id, editable in settings) |
+| 2 | `building` has no **currency** | New cost entries need a default | `ADD currency CHAR(3) NOT NULL DEFAULT 'EUR'` — only a default; amounts store their own currency (§4) |
 | 3 | `issue` requires `problem_type_id` **or** `other_text` (`ck_issue_problem`) | A scheduled maintenance task has neither — its title comes from the plan | Add `issue.kind` (`REPORTED` default \| `SCHEDULED`), `maintenance_plan_id`, `due_on`; relax the check to `kind = 'SCHEDULED' OR problem_type_id IS NOT NULL OR other_text IS NOT NULL` |
-| 4 | `NotificationService` only consumes `IssueActivity` | Announcements, bookings and due tasks also notify people | Extract a generic `notify(NotificationRequest)` (recipients, building, type, title, body, link, subject id); `IssueActivity` becomes one producer of it. The `notification` table is already generic (`issue_id` nullable, free `link`) |
-| 5 | Deleting spaces / archiving assets only checks assets and open issues | Plans, bookings and booking configs also hang off spaces and assets | Extend the existing guards: `SPACE_HAS_BOOKINGS` for future bookings; archiving an asset pauses its plans |
-| 6 | Scheduled jobs assume one backend instance (`MembershipExpiryJob`) | Phase 6 adds two more jobs (task generation, booking reminders) | Fine on one node; when scaling out, add a DB lock (e.g. ShedLock) around `@Scheduled` methods |
-| 7 | New features need new **actions** | Authorization stays "one table, one method" | Constants in `Action` + rows in `permission_policy` for both presets (table in §6). An action needs a code path that checks it anyway, so this is expected, not a smell |
+| 4 | `NotificationService` only consumes `IssueActivity` | Booking requests/decisions and due tasks also notify people | Extract a generic `notify(NotificationRequest)` (recipients, building, type, title, body, link, subject id); `IssueActivity` becomes one producer of it. The `notification` table is already generic (`issue_id` nullable, free `link`) |
+| 5 | Deleting spaces / archiving assets only checks assets and open issues | Plans, bookings and booking policies also hang off spaces and assets | Extend the existing guards: `SPACE_HAS_BOOKINGS`, `SPACE_HAS_PLANS`; archiving an asset pauses its plans |
+| 6 | Scheduled jobs assume one backend instance (`MembershipExpiryJob`) | Phase 6 adds task generation and booking reminders | Fine on one node; when scaling out, add a DB lock (e.g. ShedLock) around `@Scheduled` methods |
+| 7 | New features need new **actions** | Authorization stays "one table, one method" | Constants in `Action` + rows in `permission_policy` for both presets (table in §5) |
 
-Nothing else changes: `space.path` gives audiences and booking scopes, `IssueAccess`/`SpacePrivacy` give privacy,
-`StorageService` + `SignedUrls` give attachments and receipts, `Versions` gives conflict detection.
+Nothing else changes: `space.path` gives booking scopes, `IssueAccess`/`SpacePrivacy` give privacy,
+`StorageService` + `SignedUrls` give receipts, `Versions` gives conflict detection.
 
 ```mermaid
 erDiagram
@@ -31,12 +43,9 @@ erDiagram
     ASSET |o--o{ MAINTENANCE_PLAN : "target (or space)"
     SPACE |o--o{ MAINTENANCE_PLAN : "target (or asset)"
     MAINTENANCE_PLAN ||--o{ ISSUE : "generates (kind=SCHEDULED)"
-    BUILDING ||--o{ ANNOUNCEMENT : has
-    SPACE |o--o{ ANNOUNCEMENT : "audience subtree"
-    ANNOUNCEMENT ||--o{ ANNOUNCEMENT_READ : "seen by"
     SPACE ||--o| BOOKING_POLICY : "bookable if present"
     SPACE ||--o{ BOOKING : "booked"
-    MEMBERSHIP ||--o{ BOOKING : books
+    MEMBERSHIP ||--o{ BOOKING : requests
     BUILDING ||--o{ COST_ENTRY : has
     ISSUE |o--o{ COST_ENTRY : "optional anchor"
     MAINTENANCE_PLAN |o--o{ COST_ENTRY : "optional anchor"
@@ -50,10 +59,10 @@ erDiagram
 **Goal:** "Elevator inspection every 6 months", "change the stairwell bulbs every January", "clean the garage
 monthly" — generated as tasks someone must do, visible, tracked and auditable.
 
-### Key decision: occurrences are issues
+### Occurrences are issues *(decided)*
 Each due occurrence is an **`Issue` with `kind = SCHEDULED`**, not a separate task table. That reuses, for free:
 the lifecycle (REPORTED → … → RESOLVED), the timeline with comments and photos, notifications, the triage board,
-merge, costs (§5), and the QR flow (scanning the elevator shows "inspection due Friday" next to reported
+merge, costs (§4), and the QR flow (scanning the elevator shows "inspection due Friday" next to reported
 problems). The differences are small and explicit:
 
 | | Reported issue | Scheduled task |
@@ -100,8 +109,7 @@ skipping silently is worse than two open tasks), and the dashboard shows both as
 * Resolving a task can require the checklist to be ticked (stored as the RESOLVED event's payload) — optional.
 
 ### Notifications
-`TASK_DUE` to triagers when an occurrence is created; `TASK_OVERDUE` once when it passes `due_on`. Optionally
-the plan can auto-post an **announcement** to the affected area ("Elevator out of service Fri 9–12") — see §3.
+`TASK_DUE` to triagers when an occurrence is created; `TASK_OVERDUE` once when it passes `due_on`.
 
 ### API
 | Method | Path | Action |
@@ -115,65 +123,16 @@ the plan can auto-post an **announcement** to the affected area ("Elevator out o
 ### UX
 * **Web:** "Maintenance" page: plans table (target, recurrence in words — "every 6 months on the 1st", next due,
   last done), plan form with a live "next 5 dates" preview; triage board gets a *Maintenance* filter and an
-  **Overdue** column highlight; dashboard gets "due this week" and "overdue" counters.
+  **Overdue** highlight; dashboard gets "due this week" and "overdue" counters.
 * **Mobile:** tasks appear in the triage/"Manage" list; residents see upcoming maintenance on the asset screen
   ("Next inspection: 1 Apr").
 
 ---
 
-## 3. Announcements
+## 3. Shared-space booking
 
-**Goal:** "Water cut on floor 3 tomorrow 10–12", "General assembly on the 15th" — reach exactly the right people,
-know they saw it.
-
-### Data model
-```
-announcement(
-  id, version, building_id, author_membership_id,
-  title VARCHAR(160), body TEXT,            -- plain text + light markdown (bold, lists, links)
-  audience_space_id UUID?,                  -- NULL = whole building; else this space's subtree
-  audience_roles VARCHAR?                   -- optional CSV filter, e.g. "OWNER" for an owners' assembly
-  pinned BOOLEAN, publish_at TIMESTAMP, expires_at TIMESTAMP?,
-  created_at, updated_at, deleted_at?)
-announcement_attachment(id, announcement_id, storage_key, content_type, size_bytes, name)   -- StorageService
-announcement_read(announcement_id, user_id, read_at, PRIMARY KEY (announcement_id, user_id))
-```
-
-### Audience
-Uses the existing materialized path, exactly like `OWN_UNIT` permissions:
-* building-wide → every active member;
-* subtree `S` → members whose **unit** lies within `S` (`unit.path LIKE S.path || '%'`), plus everyone holding
-  `ANNOUNCEMENT_POST` (so managers see what was posted);
-* `audience_roles` narrows further (owners-only assembly convocations).
-Expired or revoked memberships never match (same `isActiveAt` rule as everything else).
-
-### Behaviour
-* Scheduled publishing (`publish_at` in the future) — the same daily/minutely job publishes and notifies.
-* **Notifications:** `ANNOUNCEMENT` to the audience (push + in-app), link `/buildings/{b}/announcements/{id}`.
-* **Read receipts:** opening it records `announcement_read`; authors see "seen by 34 / 52" (count only, no list,
-  for privacy — a list could be an owners-only option later).
-* Editing after publishing keeps the id, records `updated_at` and shows "edited"; no re-notification unless the
-  author ticks "notify again". Soft delete.
-* Maintenance plans (§2) can create announcements for their target's subtree automatically.
-
-### API
-| Method | Path | Action |
-|---|---|---|
-| GET | `/buildings/{b}/announcements?includeExpired=` | member (filtered to their audience) |
-| POST / PUT / DELETE | `/buildings/{b}/announcements[/{id}]` | `ANNOUNCEMENT_POST` (author or same rights) |
-| POST | `/buildings/{b}/announcements/{id}/read` | member in audience |
-| POST | `/buildings/{b}/announcements/{id}/attachments` | `ANNOUNCEMENT_POST` |
-
-### UX
-* **Web:** "Announcements" page with composer (audience picker = the existing space tree + role chips; "who will
-  receive this: 12 people" preview), pinned first.
-* **Mobile:** banner for unread pinned announcements on the building screen; list; push opens it.
-
----
-
-## 4. Shared-space booking
-
-**Goal:** book the party room, the BBQ, the guest parking spot — no double bookings, fair limits, house rules.
+**Goal:** book the party room, the BBQ, the guest parking spot — no double bookings, fair limits, house rules,
+and **an admin reviews every request** *(decided)*. No payments or deposits *(decided)*.
 
 ### Data model
 ```
@@ -184,71 +143,100 @@ booking_policy(                              -- presence makes a space bookable 
   min_minutes INT, max_minutes INT,
   opening_hours JSON,                        -- per weekday, local time: {"MON":[["10:00","22:00"]], …}
   advance_days INT,                          -- how far ahead one may book
-  max_active_per_unit INT?,                  -- fairness: e.g. 2 future bookings per unit
-  requires_approval BOOLEAN,
-  cancel_cutoff_hours INT,                   -- residents can't cancel later than this
-  rules_text TEXT?)                          -- house rules shown before confirming
+  max_active_per_unit INT?,                  -- fairness: e.g. 2 pending/confirmed future bookings per unit
+  cancel_cutoff_hours INT,                   -- residents can't cancel a confirmed booking later than this
+  rules_text TEXT?)                          -- house rules shown before requesting
 
 booking(
   id, version, building_id, space_id,
   membership_id, unit_space_id?,             -- unit snapshot for per-unit limits
   starts_at TIMESTAMP, ends_at TIMESTAMP,    -- instants; UI renders in the building's time zone
   status VARCHAR(16),                        -- PENDING | CONFIRMED | REJECTED | CANCELLED
-  note VARCHAR?, decided_by?, decided_at?, cancelled_by?, cancelled_at?,
+  note VARCHAR?,                             -- requester's note ("birthday, ~20 people")
+  decision_note VARCHAR?,                    -- admin's reason, shown to the requester on rejection
+  decided_by?, decided_at?, cancelled_by?, cancelled_at?,
+  reminded_at?,                              -- when admins were reminded about a long-pending request
   created_at)
 ```
+There is no `requires_approval` switch: approval is always required. Payment fields are deliberately absent;
+adding paid bookings later would be a separate `booking_charge` table plus a payment-provider integration, without
+touching `booking`.
+
+### Flow
+1. A member requests a slot → **PENDING**. The slot is held: other requests for an overlapping time are refused,
+   so the admin never has to choose between two people for the same evening.
+2. An admin (`BOOKING_MANAGE`) **approves** → CONFIRMED, or **rejects** with an optional reason → REJECTED (slot
+   freed).
+3. A request still PENDING after **48 hours** (`app.bookings.review-reminder-after`) triggers one
+   `BOOKING_REVIEW_REMINDER` to the admins (once per request, tracked by `booking.reminded_at`). Requests not
+   decided before their start time expire automatically (job) → REJECTED with reason "Not reviewed in time".
+   The admins' queue shows how old each request is.
+4. The requester can withdraw a PENDING request anytime and cancel a CONFIRMED one until `cancel_cutoff_hours`;
+   admins can cancel anything, with a reason.
 
 ### Correctness
-* **No overlaps:** creating or approving a booking takes a row lock on the space's `booking_policy`
+* **No overlaps:** requesting or approving takes a row lock on the space's `booking_policy`
   (`SELECT … FOR UPDATE`, the same pattern as issue numbering and invitation accepts), then checks overlap
   against PENDING + CONFIRMED bookings. Portable to H2 and PostgreSQL; on PostgreSQL an exclusion constraint on
   `tstzrange(starts_at, ends_at)` can be added later as a second line of defence.
 * Validation in the building's time zone: inside opening hours, aligned to `slot_minutes`, within
   min/max duration and `advance_days`, not in the past, per-unit limit.
-* **Memberships:** expired/revoked members can't book (permission check); the existing expiry job also
-  **cancels their future bookings** and notifies admins.
+* **Memberships:** expired/revoked members can't request (permission check); the existing expiry job also
+  **cancels their pending and future bookings** and notifies admins.
 * Spaces with future bookings can't be deleted (`SPACE_HAS_BOOKINGS`); disabling a policy keeps existing
   bookings and offers "cancel and notify all".
 
 ### Notifications
-`BOOKING_REQUESTED` → members with `BOOKING_MANAGE` (when approval is required); `BOOKING_CONFIRMED` / `BOOKING_REJECTED` / `BOOKING_CANCELLED` → the
-booker; optional reminder 24 h before (job).
+`BOOKING_REQUESTED` and, after 48 h still pending, `BOOKING_REVIEW_REMINDER` → members with `BOOKING_MANAGE`; `BOOKING_CONFIRMED` / `BOOKING_REJECTED` (with the reason) /
+`BOOKING_CANCELLED` → the requester; optional reminder 24 h before a confirmed booking (job).
 
 ### API
 | Method | Path | Action |
 |---|---|---|
 | GET | `/buildings/{b}/bookable-spaces` | member |
 | GET/PUT | `/buildings/{b}/spaces/{s}/booking-policy` | member / `BOOKING_MANAGE` |
-| GET | `/buildings/{b}/spaces/{s}/availability?from=&to=` | member — free/busy slots, no names |
-| GET | `/buildings/{b}/bookings?mine=&spaceId=&from=&to=` | member (others' bookings show as "booked", names only to `BOOKING_MANAGE`) |
-| POST | `/buildings/{b}/bookings` | `BOOKING_CREATE` |
+| GET | `/buildings/{b}/spaces/{s}/availability?from=&to=` | member — free/held/booked slots, no names |
+| GET | `/buildings/{b}/bookings?mine=&spaceId=&status=&from=&to=` | member (others' bookings show only as "booked", names only to `BOOKING_MANAGE`) |
+| POST | `/buildings/{b}/bookings` | `BOOKING_CREATE` → PENDING |
 | POST | `/buildings/{b}/bookings/{id}/approve` · `/reject` | `BOOKING_MANAGE` |
-| POST | `/buildings/{b}/bookings/{id}/cancel` | booker (before cutoff) or `BOOKING_MANAGE` |
-| GET | `/me/bookings.ics?token=` | signed calendar feed (reuses `SignedUrls`) |
+| POST | `/buildings/{b}/bookings/{id}/cancel` | requester (PENDING anytime, CONFIRMED before cutoff) or `BOOKING_MANAGE` |
+| GET | `/me/bookings.ics?token=` | signed calendar feed of confirmed bookings (reuses `SignedUrls`) |
 
 ### UX
-* **Mobile:** "Book a space" → pick space → week strip with free slots → tap start/end → rules → confirm.
-* **Web:** calendar per space; admin approvals queue; policy editor with opening-hours grid.
+* **Mobile:** "Book a space" → pick space → week strip with free slots → tap start/end → rules → "Request" →
+  "Waiting for approval" with status in *My bookings*; push when decided.
+* **Web:** calendar per space (pending shown hatched); **approvals queue** with one-click approve/reject-with-reason;
+  policy editor with an opening-hours grid.
 
 ---
 
-## 5. Cost tracking
+## 4. Cost tracking
 
 **Goal:** know what the building spends, on what, and why — per issue, per asset, per month — with receipts.
-This is **tracking, not billing**: splitting costs across units by quota (*permilagem*) and issuing charges is a
-separate, much larger domain (see open question 4).
+**Tracking only** *(decided)*: no splitting by unit quota (*permilagem*), no per-unit statements or charges.
+
+### Money, future-proof *(decided)*
+* Every amount is stored **with its own currency**: `amount NUMERIC(19,4)` + `currency CHAR(3)` (ISO 4217).
+  `building.currency` (default **EUR**) only pre-fills the form.
+* In Java a small `Money(BigDecimal amount, Currency currency)` value type; never `double`. The amount's scale is
+  validated against the currency's minor units (`Currency.getDefaultFractionDigits()`: 2 for EUR, 0 for JPY, 3 for
+  BHD), so new currencies need no code.
+* **No implicit conversion:** totals and reports are always **grouped by currency** ("€1,240.00 · £85.00"). If a
+  building ever mixes currencies, an exchange-rate table can be added later without changing stored entries.
+* The API carries amounts as **decimal strings** (`"amount": "120.50", "currency": "EUR"`) so JavaScript clients
+  never round through floating point; clients format them with `Intl.NumberFormat` in the user's locale.
 
 ### Data model
 ```
 cost_entry(
   id, version, building_id,
-  amount NUMERIC(12,2), currency CHAR(3),      -- BigDecimal in Java, never double; default building.currency
+  amount NUMERIC(19,4), currency CHAR(3),
   incurred_on DATE,
   category VARCHAR(32),                        -- REPAIR | MAINTENANCE | CLEANING | UTILITIES | INSURANCE | OTHER
   description VARCHAR(500), vendor VARCHAR(160)?,
   issue_id?, maintenance_plan_id?, asset_id?, space_id?,   -- optional anchors (several allowed)
   receipt_storage_key?, receipt_content_type?,              -- StorageService, served via SignedUrls
-  created_by, created_at, updated_at, deleted_at?)
+  created_by, created_at, updated_at, deleted_at?, delete_reason?)
 ```
 Categories start as an enum; if buildings need their own, they become reference rows like asset types.
 
@@ -264,21 +252,22 @@ Categories start as an enum; if buildings need their own, they become reference 
 | Endpoint | Shows |
 |---|---|
 | `GET /buildings/{b}/costs?from=&to=&category=&assetId=&issueId=` | entries, paged |
-| `GET /buildings/{b}/costs/summary?from=&to=&groupBy=month\|category\|asset\|space` | totals for charts |
-| `GET /buildings/{b}/costs/export.csv?from=&to=` | for the accountant |
-| Issue detail / asset detail | "Costs: €340 (3 entries)" |
+| `GET /buildings/{b}/costs/summary?from=&to=&groupBy=month\|category\|asset\|space` | totals per group **and currency** |
+| `GET /buildings/{b}/costs/export.csv?from=&to=` | for the accountant (amount, currency, date, category, anchors) |
+| Issue detail / asset detail | "Costs: €340.00 (3 entries)" |
 
 ### API / permissions
-`COST_VIEW` for lists and reports, `COST_MANAGE` to create/edit/delete (§6).
+`COST_VIEW` for lists and reports, `COST_MANAGE` to create/edit/delete (§5).
 
 ### UX
 * **Web:** Costs page with filters, monthly bar chart, category breakdown, asset "cost of ownership"; add-cost
-  dialog from an issue, a task or the costs page (amount, date, category, vendor, receipt photo).
+  dialog from an issue, a task or the costs page (amount, currency pre-filled from the building, date, category,
+  vendor, receipt photo).
 * **Mobile:** "Add cost + photo of the receipt" from an issue for managers on site; read-only totals.
 
 ---
 
-## 6. Permissions: new actions and preset rows
+## 5. Permissions: new actions and preset rows
 
 Same model as phases 1–5: new `Action` constants, rows per preset, one `PermissionService.can` call.
 
@@ -286,44 +275,34 @@ Same model as phases 1–5: new `Action` constants, rows per preset, one `Permis
 |---|---|---|
 | `MAINTENANCE_VIEW` | all roles | all roles |
 | `MAINTENANCE_MANAGE` | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
-| `ANNOUNCEMENT_POST` | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
 | `BOOKING_CREATE` | all roles | all roles |
-| `BOOKING_MANAGE` | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
+| `BOOKING_MANAGE` (approve/reject, policies) | ADMIN, MANAGER | ADMIN, MANAGER |
 | `COST_VIEW` | ADMIN, MANAGER, OWNER | all roles |
 | `COST_MANAGE` | ADMIN, MANAGER | ADMIN, MANAGER, OWNER |
 
-Owners seeing costs in Managed mode reflects that owners pay for the building; tenants don't by default — one
-row to change if a building disagrees. A building wanting, say, "tenants may book but need approval" changes
-`requires_approval` on the space, not code.
+`BOOKING_MANAGE` stays with admins and managers in both presets, matching "an admin reviews every request".
+Owners see costs in Managed mode *(decided)*: they pay for the building. Tenants don't by default — one row to
+change if a building disagrees.
 
 ---
 
-## 7. Migrations (sketch, in order)
+## 6. Migrations (sketch, in order)
 
-1. `V8__building_locale.sql` — `building.time_zone`, `building.currency` (gaps #1–2).
+1. `V8__building_locale.sql` — `building.time_zone` (default `Europe/Lisbon`), `building.currency` (default `EUR`).
 2. `V9__maintenance.sql` — `maintenance_plan`; `issue.kind`, `maintenance_plan_id`, `due_on`; relax
    `ck_issue_problem`; unique `(maintenance_plan_id, due_on)`; policy rows.
-3. `V10__announcements.sql` — `announcement`, `announcement_attachment`, `announcement_read`; policy rows.
-4. `V11__bookings.sql` — `booking_policy`, `booking`; indexes `(space_id, starts_at)`; policy rows.
-5. `V12__costs.sql` — `cost_entry`; indexes `(building_id, incurred_on)`, `(issue_id)`, `(asset_id)`; policy rows.
+3. `V10__costs.sql` — `cost_entry`; indexes `(building_id, incurred_on)`, `(issue_id)`, `(asset_id)`; policy rows.
+4. `V11__bookings.sql` — `booking_policy`, `booking`; index `(space_id, starts_at)`; policy rows.
 
 All additive; existing rows get defaults (`issue.kind = 'REPORTED'`). No backfills.
 
-## 8. Suggested order
+## 7. Suggested order
 
-1. **Announcements** — smallest, immediately useful, and it forces the notification generalization (gap #4).
-2. **Maintenance** — biggest value per line of code because occurrences are issues.
-3. **Costs** — anchors on issues and plans, which then exist.
-4. **Booking** — most rules (time zones, opening hours, concurrency, fairness), least coupled to the rest.
+1. **Maintenance** — biggest value per line of code because occurrences are issues; it also introduces the generic
+   notification API (gap #4) and the building time zone that booking needs later.
+2. **Costs** — anchors on issues and plans, which then exist; introduces `Money`.
+3. **Booking** — most rules (time zones, opening hours, concurrency, approvals), least coupled to the rest.
 
-## 9. Open questions for you
+## 8. Open points
 
-1. **Maintenance tasks as issues** (recommended above) vs. a separate task list that never mixes with resident
-   reports in the triage board?
-2. **Booking approvals:** default on or off for new bookable spaces? Any **paid** bookings or deposits? (Payments
-   would be a new integration.)
-3. **Announcements:** should some (e.g. assembly convocations) require explicit **acknowledgement**, not just
-   "seen"? Is "seen by N" enough or do admins need the list of names?
-4. **Costs:** tracking only, or should the app eventually **split costs by unit quota** (*permilagem*) and produce
-   per-unit statements? The latter adds unit shares to the space tree, accounting periods and documents.
-5. **Default time zone and currency** for new buildings — Europe/Lisbon and EUR, or pick from the address?
+None. All questions are decided (see the table at the top).

@@ -131,11 +131,12 @@ Phases 2–5 entities are listed so phase 1 does not paint us into a corner; onl
 
 ### Phase 6 (design only — see [PHASE-6-DESIGN.md](PHASE-6-DESIGN.md))
 
+Decided on 2026-10-06: maintenance tasks are issues, every booking is reviewed by an admin (no payments), costs are tracked only (no per-unit splitting), EUR by default with currency stored per amount. **Announcements were dropped.**
+
 * **Maintenance schedules / recurring tasks** → `maintenance_plan` (asset or space target, small validated recurrence, lead days); each due occurrence is an **Issue with `kind = SCHEDULED`**, reusing lifecycle, timeline, photos, notifications and the triage board.
-* **Announcements** → `announcement` with an audience = whole building or a space **subtree** (same `path` logic as `OWN_UNIT`), optional role filter, scheduled publishing, read receipts.
-* **Shared-space booking** → `booking_policy` (per space: hours, slots, limits, approval) + `booking`; overlaps prevented under a row lock; expired members' future bookings are cancelled.
-* **Cost tracking** → `cost_entry` (money as NUMERIC/BigDecimal, receipts via `StorageService`), anchored to issues, plans, assets or spaces; privacy inherited from the anchor; summaries and CSV export. Tracking only, not billing.
-* New actions `MAINTENANCE_*`, `ANNOUNCEMENT_POST`, `BOOKING_*`, `COST_*` are policy rows as before.
+* **Shared-space booking** → `booking_policy` (per space: hours, slots, limits) + `booking`; every request starts PENDING until an admin approves or rejects it; overlaps prevented under a row lock (pending requests hold their slot); expired members' bookings are cancelled.
+* **Cost tracking** → `cost_entry` with `amount NUMERIC(19,4)` + its own ISO 4217 `currency` (`Money` value type, no implicit conversion, totals grouped by currency), receipts via `StorageService`, anchored to issues, plans, assets or spaces; privacy inherited from the anchor.
+* New actions `MAINTENANCE_*`, `BOOKING_*`, `COST_*` are policy rows as before.
 * **Blocker audit: none.** Additive changes only: `building.time_zone` and `currency`, `issue.kind`/`due_on` with a relaxed problem check, a generic notification API next to `IssueActivity`, extra space/asset deletion guards, and a job lock once the backend runs on several nodes.
 
 ### Tree storage strategy — adjacency list + materialized path
