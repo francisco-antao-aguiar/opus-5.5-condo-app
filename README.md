@@ -121,4 +121,4 @@ The backend allows `http://localhost:4200`, `:8081` and `:19006` by default. To 
 3. **Asset types, assets, problem catalogs** ✅
 4. **Issue reporting, duplicate detection / "me too", lifecycle and timeline** ✅
 5. **QR codes, deep links, push notifications** ✅
-6. **Design only:** maintenance, announcements, booking, costs — see [docs/PHASE-6-DESIGN.md](docs/PHASE-6-DESIGN.md) ✅
+6. **Design only:** maintenance, booking, costs — see [docs/PHASE-6-DESIGN.md](docs/PHASE-6-DESIGN.md) ✅
