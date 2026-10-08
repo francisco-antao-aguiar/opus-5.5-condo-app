@@ -391,7 +391,9 @@ public class DevDataSeeder implements ApplicationRunner {
         Issue task = issues.save(Issue.scheduled(building.getId(), building.nextIssueNumber(), asset.getId(),
                 space.getId(), SpaceService.pathLabel(space, spaceIndex), plan.getTitle(),
                 SpaceService.effectiveVisibility(space, spaceIndex), by.getId(), plan.getId(), plan.getNextDueOn(),
-                now.minus(Duration.ofDays(12))));
+                plan.getChecklist(), now.minus(Duration.ofDays(12))));
+        // Half done: the technician has already tested the emergency phone.
+        task.tick(0, true, by.getId(), now.minus(Duration.ofDays(6)));
         issueAffected.save(new IssueAffected(task.getId(), by.getId(), IssueAffected.Kind.REPORTER, task.getCreatedAt()));
         issueEvents.save(IssueEvent.of(task, by.getId(), IssueEventType.REPORTED,
                 "Scheduled maintenance, due " + plan.getNextDueOn(), task.getCreatedAt()));

@@ -1,5 +1,7 @@
-package com.condo.maintenance;
+package com.condo.common.persistence;
 
+import com.condo.issue.ChecklistTick;
+import com.condo.maintenance.Recurrence;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,7 +10,7 @@ import jakarta.persistence.Converter;
 import java.util.List;
 
 /** Small JSON columns stored as text, so the schema stays portable between H2 and PostgreSQL. */
-final class JsonConverters {
+public final class JsonConverters {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -16,7 +18,7 @@ final class JsonConverters {
     }
 
     @Converter
-    static class RecurrenceJson implements AttributeConverter<Recurrence, String> {
+    public static class RecurrenceJson implements AttributeConverter<Recurrence, String> {
 
         @Override
         public String convertToDatabaseColumn(Recurrence value) {
@@ -30,7 +32,7 @@ final class JsonConverters {
     }
 
     @Converter
-    static class StringListJson implements AttributeConverter<List<String>, String> {
+    public static class StringListJson implements AttributeConverter<List<String>, String> {
 
         @Override
         public String convertToDatabaseColumn(List<String> value) {
@@ -40,6 +42,20 @@ final class JsonConverters {
         @Override
         public List<String> convertToEntityAttribute(String json) {
             return json == null ? List.of() : read(json, new TypeReference<List<String>>() { });
+        }
+    }
+
+    @Converter
+    public static class ChecklistTicksJson implements AttributeConverter<List<ChecklistTick>, String> {
+
+        @Override
+        public String convertToDatabaseColumn(List<ChecklistTick> value) {
+            return write(value == null ? List.of() : value);
+        }
+
+        @Override
+        public List<ChecklistTick> convertToEntityAttribute(String json) {
+            return json == null ? List.of() : read(json, new TypeReference<List<ChecklistTick>>() { });
         }
     }
 

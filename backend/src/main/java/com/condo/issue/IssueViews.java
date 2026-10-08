@@ -8,6 +8,7 @@ import com.condo.auth.User;
 import com.condo.auth.UserRepository;
 import com.condo.common.config.AppProperties;
 import com.condo.common.storage.SignedUrls;
+import com.condo.issue.dto.IssueDtos.ChecklistItemDto;
 import com.condo.issue.dto.IssueDtos.IssueCapabilities;
 import com.condo.issue.dto.IssueDtos.IssueDto;
 import com.condo.issue.dto.IssueDtos.IssueEventDto;
@@ -86,6 +87,7 @@ public class IssueViews {
         Set<UUID> userIds = new HashSet<>();
         timeline.forEach(e -> userIds.add(e.getActorUserId()));
         issuePhotos.forEach(p -> userIds.add(p.getUploadedByUserId()));
+        issue.getChecklistDone().forEach(t -> userIds.add(t.by()));
         Names names = names(List.of(issue), userIds);
         Map<UUID, Integer> relatedNumbers = issues.findAllById(timeline.stream()
                         .map(IssueEvent::getRelatedIssueId).filter(java.util.Objects::nonNull).toList()).stream()
@@ -107,7 +109,20 @@ public class IssueViews {
                 s.problemTypeId(), s.otherText(), s.affectedCount(), s.photoCount(), s.reportedByName(), s.createdAt(),
                 s.statusChangedAt(), s.lastActivityAt(), s.affectedByMe(), s.stuck(), s.mergedIntoId(),
                 issue.getNote(), eventDtos, photoDtos, me, s.version(), s.kind(), s.maintenancePlanId(), s.dueOn(),
-                s.overdue());
+                s.overdue(), checklist(issue, names));
+    }
+
+    private static List<ChecklistItemDto> checklist(Issue issue, Names names) {
+        Map<Integer, ChecklistTick> ticks = issue.getChecklistDone().stream()
+                .collect(Collectors.toMap(ChecklistTick::index, t -> t, (a, b) -> a));
+        List<String> items = issue.getChecklist();
+        return java.util.stream.IntStream.range(0, items.size())
+                .mapToObj(i -> {
+                    ChecklistTick t = ticks.get(i);
+                    return new ChecklistItemDto(i, items.get(i), t != null, t != null ? names.user(t.by()) : null,
+                            t != null ? t.atInstant() : null);
+                })
+                .toList();
     }
 
     public IssuePhotoDto photo(IssuePhoto p, String uploaderName, boolean canDelete) {

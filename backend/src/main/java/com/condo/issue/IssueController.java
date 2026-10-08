@@ -1,6 +1,7 @@
 package com.condo.issue;
 
 import com.condo.issue.dto.IssueDtos.ChangeIssueStatusRequest;
+import com.condo.issue.dto.IssueDtos.ChecklistTickRequest;
 import com.condo.issue.dto.IssueDtos.CommentRequest;
 import com.condo.issue.dto.IssueDtos.IssueDashboard;
 import com.condo.issue.dto.IssueDtos.IssueDto;
@@ -112,6 +113,13 @@ public class IssueController {
     public IssueDto comment(@PathVariable UUID buildingId, @PathVariable UUID issueId,
             @Valid @RequestBody CommentRequest req) {
         return issueService.comment(buildingId, issueId, req);
+    }
+
+    @PutMapping("/issues/{issueId}/checklist/{index}")
+    @Operation(summary = "Scheduled tasks: tick or untick one checklist item")
+    public IssueDto tickChecklist(@PathVariable UUID buildingId, @PathVariable UUID issueId,
+            @PathVariable int index, @Valid @RequestBody ChecklistTickRequest req) {
+        return issueService.tickChecklist(buildingId, issueId, index, req);
     }
 
     @PostMapping("/issues/{issueId}/me-too")

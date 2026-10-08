@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { IssueDto, IssueStatus, IssueSummaryDto, MaintenancePlanDto, UUID } from '@condo/shared';
+import { ChecklistItemDto, IssueDto, IssueStatus, IssueSummaryDto, MaintenancePlanDto, UUID } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { CONFLICT_RELOADED, describeError, errorCode, ErrorText, isConflict } from '../core/errors';
 import { ConfirmService } from '../core/confirm.service';
@@ -8,6 +8,8 @@ import { ToastService } from '../core/toast.service';
 import { assetCodeIcon } from '../shared/assets';
 import {
   MAX_PAGE_SIZE,
+  checklistDoneText,
+  checklistProgress,
   MAX_PHOTOS,
   STATUS_BADGE,
   detailTransitions,
@@ -42,7 +44,10 @@ export class IssueDetailPage {
   protected readonly issue = signal<IssueDto | null>(null);
   /** The maintenance plan of a scheduled task (for its checklist). */
   protected readonly plan = signal<MaintenancePlanDto | null>(null);
-  protected readonly ticked = signal<ReadonlySet<number>>(new Set());
+  /** Checklist indexes with a tick request in flight. */
+  protected readonly ticking = signal<ReadonlySet<number>>(new Set());
+  protected readonly progress = checklistProgress;
+  protected readonly doneText = (item: ChecklistItemDto) => checklistDoneText(item, this.ctx.building()?.timeZone);
   protected readonly today = computed(() => todayIn(this.ctx.building()?.timeZone ?? 'Europe/Lisbon'));
   protected readonly localDate = (d: string | null) => formatLocalDate(d);
   protected readonly loading = signal(true);
@@ -112,13 +117,26 @@ export class IssueDetailPage {
     }
   }
 
-  protected tick(i: number): void {
-    this.ticked.update((s) => {
-      const n = new Set(s);
-      if (n.has(i)) n.delete(i);
-      else n.add(i);
-      return n;
-    });
+  /** Saves one checklist tick; the server's IssueDto (new version) becomes the state. No optimistic update. */
+  protected async tick(index: number, done: boolean, box: HTMLInputElement): Promise<void> {
+    if (this.ticking().has(index)) return;
+    this.ticking.update((s) => new Set(s).add(index));
+    try {
+      this.issue.set(await this.api.client.issues.tickChecklist(this.bid, this.issueId(), index, { done }));
+    } catch (e) {
+      box.checked = !done; // undo the browser's own toggle; the refetch below has the truth
+      const code = errorCode(e);
+      if (isConflict(e)) this.toast.info('Someone else just updated this checklist — reloaded it.');
+      else if (code === 'INVALID_STATE') this.toast.info('This task is closed, so its checklist can no longer change.');
+      else this.toast.error(e);
+      if (isConflict(e) || code === 'INVALID_STATE') await this.load();
+    } finally {
+      this.ticking.update((s) => {
+        const n = new Set(s);
+        n.delete(index);
+        return n;
+      });
+    }
   }
 
   protected transitionLabel(to: IssueStatus): string {

@@ -1,7 +1,10 @@
 <div class="page-head">
   <h1>Bookings</h1>
   @if (canBook()) {
-    <button type="button" class="btn" (click)="copyCalendarLink()" title="Subscribe to your confirmed bookings in Google/Apple/Outlook calendar">📅 Copy calendar link</button>
+    <div class="row gap wrap">
+      <button type="button" class="btn" (click)="copyCalendarLink()" title="Subscribe to your confirmed bookings in Google/Apple/Outlook calendar">📅 Copy calendar link</button>
+      <button type="button" class="btn btn-sm" [disabled]="resettingLink()" (click)="resetCalendarLink()" title="Revoke all earlier calendar links and make a new one">↻ Reset link</button>
+    </div>
   }
 </div>
 
@@ -15,6 +18,18 @@
     </button>
   }
 </nav>
+
+@if (calendarUrl(); as url) {
+  <div class="alert alert-info calendar-link">
+    <strong>Your calendar link</strong>
+    <p class="muted small">Add it in your calendar app as a subscription (“From URL”). Anyone with it can see your confirmed bookings.</p>
+    <div class="row gap wrap">
+      <input type="text" class="grow" readonly [value]="url" (focus)="$any($event.target).select()" aria-label="Calendar link" />
+      <button type="button" class="btn btn-sm" (click)="copyUrl(url)">⧉ Copy</button>
+      <button type="button" class="btn-icon" aria-label="Hide" (click)="calendarUrl.set(null)">✕</button>
+    </div>
+  </div>
+}
 
 @if (tz() !== browserTz) {
   <p class="muted small">All times are in the building's time zone, {{ tz() }} (your device is in {{ browserTz }}).</p>

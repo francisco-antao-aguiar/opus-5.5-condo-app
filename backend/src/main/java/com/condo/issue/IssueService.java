@@ -15,6 +15,7 @@ import com.condo.governance.Action;
 import com.condo.governance.PermissionService;
 import com.condo.governance.SpacePrivacy;
 import com.condo.issue.dto.IssueDtos.ChangeIssueStatusRequest;
+import com.condo.issue.dto.IssueDtos.ChecklistTickRequest;
 import com.condo.issue.dto.IssueDtos.CommentRequest;
 import com.condo.issue.dto.IssueDtos.DuplicateIssueInfo;
 import com.condo.issue.dto.IssueDtos.IssueCapabilities;
@@ -301,6 +302,30 @@ public class IssueService {
         return detail(l);
     }
 
+    /** Scheduled tasks: whoever runs the task ticks items off as the work gets done. Not part of the timeline. */
+    public IssueDto tickChecklist(UUID buildingId, UUID issueId, int index, ChecklistTickRequest req) {
+        Loaded l = load(buildingId, issueId);
+        Issue issue = l.issue();
+        if (!issue.isScheduled()) {
+            throw ApiException.notFound("Checklist");
+        }
+        if (!canTriage(l)) {
+            throw ApiException.forbidden(ErrorCodes.PERMISSION_DENIED, "Only people who run this task can tick it.");
+        }
+        if (!issue.isOpen()) {
+            throw ApiException.conflict(ErrorCodes.INVALID_STATE, "This task is resolved — reopen it to change its checklist.");
+        }
+        if (index < 0 || index >= issue.getChecklist().size()) {
+            throw ApiException.notFound("Checklist item");
+        }
+        Instant now = clock.instant();
+        if (issue.tick(index, req.done(), userId(l), now)) {
+            issue.touch(now);
+            issues.flush();
+        }
+        return detail(l);
+    }
+
     public IssueDto meToo(UUID buildingId, UUID issueId) {
         Loaded l = load(buildingId, issueId);
         Issue issue = l.issue();
@@ -458,7 +483,9 @@ public class IssueService {
         boolean canShare = !merged && issue.getVisibility() == Visibility.PRIVATE
                 && (reporter || access.isUnitMember(m, l.space()));
         return new IssueCapabilities(reporter, isAffected, canMeToo, !merged,
-                access.allowedTransitions(m, issue, l.space(), isAffected), canMerge, canShare, canAddPhoto(l));
+                access.allowedTransitions(m, issue, l.space(), isAffected), canMerge, canShare, canAddPhoto(l),
+                issue.isScheduled() && issue.isOpen() && !issue.getChecklist().isEmpty()
+                        && access.canTriage(m, issue, l.space()));
     }
 
     private boolean isAffected(Loaded l) {

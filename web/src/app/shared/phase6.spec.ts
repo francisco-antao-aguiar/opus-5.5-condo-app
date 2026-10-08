@@ -2,6 +2,7 @@ import { BookingPolicyDto, BusySlot, CostSummary } from '@condo/shared';
 import { summaryLabel, summaryView, validateReceipt } from './costs';
 import { currencyDecimals, formatMoney, formatTotals, parseAmount, percentOf, sumByCurrency } from './money';
 import { changeUnit, defaultRecurrenceForm, describeRecurrence, fromRecurrence, recurrenceError, toRecurrence, toggleWeekday, weekdayOf } from './recurrence';
+import { checklistDoneText, checklistProgress } from './issues';
 import { buildWeek, pickRange, weekBounds } from './slots';
 import { addDays, formatRange, localParts, startOfWeek, zonedToUtc } from './zoned';
 
@@ -220,5 +221,20 @@ describe('booking slot grid', () => {
 
   it('computes week bounds as instants of local midnights', () => {
     expect(weekBounds('2026-03-23', 'Europe/Lisbon')).toEqual({ from: '2026-03-23T00:00:00.000Z', to: '2026-03-29T23:00:00.000Z' });
+  });
+});
+
+describe('task checklist display', () => {
+  it('counts done items', () => {
+    expect(checklistProgress([])).toBe('');
+    expect(checklistProgress([{ done: true }, { done: false }, { done: true }])).toBe('2/3 done');
+  });
+
+  it('describes who ticked an item and when, in the building zone', () => {
+    const item = { done: true, doneByName: 'Miguel Manager', doneAt: '2026-10-07T23:30:00Z' };
+    expect(checklistDoneText(item, 'Europe/Lisbon')).toBe('✓ by Miguel Manager · 8 Oct');
+    expect(checklistDoneText(item, 'America/Sao_Paulo')).toBe('✓ by Miguel Manager · 7 Oct');
+    expect(checklistDoneText({ done: true, doneByName: null, doneAt: null })).toBe('✓');
+    expect(checklistDoneText({ ...item, done: false })).toBe('');
   });
 });

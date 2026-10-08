@@ -36,7 +36,12 @@ public final class IssueDtos {
     }
 
     public record IssueCapabilities(boolean isReporter, boolean isAffected, boolean canMeToo, boolean canComment,
-            List<IssueStatus> allowedTransitions, boolean canMerge, boolean canChangeSharing, boolean canAddPhoto) {
+            List<IssueStatus> allowedTransitions, boolean canMerge, boolean canChangeSharing, boolean canAddPhoto,
+            boolean canTickChecklist) {
+    }
+
+    /** One item of a scheduled task's checklist. */
+    public record ChecklistItemDto(int index, String text, boolean done, String doneByName, Instant doneAt) {
     }
 
     /** Flattened summary + details (the TS type extends IssueSummaryDto). */
@@ -46,7 +51,7 @@ public final class IssueDtos {
             int photoCount, String reportedByName, Instant createdAt, Instant statusChangedAt,
             Instant lastActivityAt, boolean affectedByMe, boolean stuck, UUID mergedIntoId, String note, List<IssueEventDto> timeline, List<IssuePhotoDto> photos,
             IssueCapabilities me, long version, IssueKind kind, UUID maintenancePlanId, LocalDate dueOn,
-            boolean overdue) {
+            boolean overdue, List<ChecklistItemDto> checklist) {
     }
 
     public record ReportIssueRequest(
@@ -68,6 +73,9 @@ public final class IssueDtos {
     }
 
     public record CommentRequest(@NotBlank @Size(max = 1000) String text) {
+    }
+
+    public record ChecklistTickRequest(@NotNull Boolean done) {
     }
 
     public record MergeIssueRequest(@NotNull UUID intoIssueId, @Size(max = 1000) String comment) {

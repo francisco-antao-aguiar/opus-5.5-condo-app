@@ -1,6 +1,7 @@
 package com.condo.maintenance;
 
 import com.condo.common.persistence.BaseEntity;
+import com.condo.common.persistence.JsonConverters;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;

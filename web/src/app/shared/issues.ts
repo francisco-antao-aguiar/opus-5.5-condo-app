@@ -245,3 +245,21 @@ export function newClientRequestId(): UUID {
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
+
+// ---------- checklist (scheduled tasks) ----------
+
+/** "2/5 done", or '' for an empty checklist. */
+export function checklistProgress(items: readonly { done: boolean }[]): string {
+  if (!items.length) return '';
+  return `${items.filter((i) => i.done).length}/${items.length} done`;
+}
+
+/** "✓ by Ana · 7 Oct" for a done item; '' otherwise. */
+export function checklistDoneText(item: { done: boolean; doneByName: string | null; doneAt: Instant | null }, timeZone?: string): string {
+  if (!item.done) return '';
+  const who = item.doneByName ? ` by ${item.doneByName}` : '';
+  const when = item.doneAt
+    ? ` · ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', ...(timeZone ? { timeZone } : {}) }).format(new Date(item.doneAt))}`
+    : '';
+  return `✓${who}${when}`;
+}

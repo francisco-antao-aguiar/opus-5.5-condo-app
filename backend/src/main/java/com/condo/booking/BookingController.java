@@ -105,6 +105,12 @@ public class BookingController {
         return calendar.link();
     }
 
+    @PostMapping("/api/me/bookings/calendar-link/reset")
+    @Operation(summary = "Revoke every calendar link handed out before and get a new one")
+    public CalendarLink resetCalendarLink() {
+        return calendar.resetLink();
+    }
+
     @GetMapping("/api/files/calendar/{userId}.ics")
     public ResponseEntity<byte[]> calendarFeed(@PathVariable UUID userId, @RequestParam long exp,
             @RequestParam String sig) {
