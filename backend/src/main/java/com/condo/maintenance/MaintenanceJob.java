@@ -5,6 +5,7 @@ import com.condo.building.BuildingRepository;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +30,13 @@ public class MaintenanceJob {
         this.buildings = buildings;
     }
 
+    /** Hourly, on one node only. */
     @Scheduled(cron = "${app.maintenance.jobs-cron}")
+    @SchedulerLock(name = "maintenance-job", lockAtMostFor = "PT55M", lockAtLeastFor = "PT30S")
+    public void scheduled() {
+        run();
+    }
+
     public void run() {
         int created = 0;
         for (UUID planId : plans.findSchedulableIds()) {
