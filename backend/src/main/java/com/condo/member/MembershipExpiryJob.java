@@ -3,6 +3,7 @@ package com.condo.member;
 import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +25,14 @@ public class MembershipExpiryJob {
         this.clock = clock;
     }
 
+    /** Every 15 minutes, on one node only. */
     @Scheduled(cron = "${app.memberships.expiry-cron}")
+    @SchedulerLock(name = "membership-expiry-job", lockAtMostFor = "PT14M", lockAtLeastFor = "PT30S")
+    @Transactional
+    public void scheduled() {
+        expireMemberships();
+    }
+
     @Transactional
     public int expireMemberships() {
         int expired = memberships.markExpired(clock.instant());
