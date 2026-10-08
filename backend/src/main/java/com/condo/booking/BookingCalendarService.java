@@ -1,5 +1,7 @@
 package com.condo.booking;
 
+import com.condo.auth.User;
+import com.condo.auth.UserRepository;
 import com.condo.building.Building;
 import com.condo.building.BuildingRepository;
 import com.condo.common.error.ApiException;
@@ -23,10 +25,11 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
  * iCalendar feed of a user's confirmed bookings, for calendar apps. Calendar apps can't send an Authorization
- * header, so the feed URL is signed and long-lived (a year); getting a new link doesn't revoke old ones yet.
+ * header, so the feed URL is signed and long-lived (a year). The signature covers the user's calendar key, so
+ * resetting the key revokes every link handed out before.
  */
 @Service
-@Transactional(readOnly = true)
+@Transactional
 public class BookingCalendarService {
 
     static final Duration FEED_TTL = Duration.ofDays(365);
@@ -36,29 +39,52 @@ public class BookingCalendarService {
     private final BookingRepository bookings;
     private final SpaceRepository spaces;
     private final BuildingRepository buildings;
+    private final UserRepository users;
     private final SignedUrls signedUrls;
     private final Clock clock;
 
     public BookingCalendarService(BookingRepository bookings, SpaceRepository spaces, BuildingRepository buildings,
-            SignedUrls signedUrls, Clock clock) {
+            UserRepository users, SignedUrls signedUrls, Clock clock) {
         this.bookings = bookings;
         this.spaces = spaces;
         this.buildings = buildings;
+        this.users = users;
         this.signedUrls = signedUrls;
         this.clock = clock;
     }
 
     public BookingDtos.CalendarLink link() {
-        UUID userId = CurrentUser.id();
-        SignedUrls.Signature sig = signedUrls.sign("calendar:" + userId, FEED_TTL);
+        return link(me());
+    }
+
+    /** Revokes every calendar link handed out before and returns a fresh one. */
+    public BookingDtos.CalendarLink resetLink() {
+        User user = me();
+        user.rotateCalendarKey();
+        return link(user);
+    }
+
+    private User me() {
+        return users.findById(CurrentUser.id()).orElseThrow(() -> ApiException.notFound("User"));
+    }
+
+    private BookingDtos.CalendarLink link(User user) {
+        UUID userId = user.getId();
+        SignedUrls.Signature sig = signedUrls.sign(resource(userId, user.calendarKey()), FEED_TTL);
         String url = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/api/files/calendar/{user}.ics").queryParam("exp", sig.expiresAtEpochSeconds())
                 .queryParam("sig", sig.sig()).buildAndExpand(userId).toUriString();
         return new BookingDtos.CalendarLink(url);
     }
 
+    private static String resource(UUID userId, String calendarKey) {
+        return "calendar:" + userId + ":" + calendarKey;
+    }
+
+    @Transactional(readOnly = true)
     public String feed(UUID userId, long exp, String sig) {
-        if (!signedUrls.verify("calendar:" + userId, exp, sig)) {
+        String key = users.findById(userId).map(User::getCalendarKey).orElse(null);
+        if (key == null || !signedUrls.verify(resource(userId, key), exp, sig)) {
             throw ApiException.forbidden(ErrorCodes.PERMISSION_DENIED, "This calendar link is invalid or has expired.");
         }
         Instant now = clock.instant();

@@ -77,7 +77,7 @@ Seven sample issues show the whole lifecycle:
 | 4 | Intercom · No sound | Resolved |
 | 5 | 2B kitchen sink · Leak | **Private**: only 2B's members see it (not shared with management) |
 | 6, 7 | Roof door · "Hinge squeaks" | The same free "Other" text twice → ready to promote in the "Other" review |
-| 8 | Elevator inspection | A **scheduled maintenance task** 5 days past due → *overdue* on the dashboard |
+| 8 | Elevator inspection | A **scheduled maintenance task** 5 days past due → *overdue* on the dashboard; 1 of 3 checklist items ticked |
 
 Maintenance, costs and booking (phase 6):
 

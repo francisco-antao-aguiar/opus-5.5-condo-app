@@ -554,3 +554,10 @@ export function useBookingDecision(buildingId: UUID) {
     onSettled: invalidate,
   });
 }
+
+/** Tick / untick one item of a scheduled task's checklist; the returned issue replaces the cached one. */
+export function useTickChecklist(buildingId: UUID, issueId: UUID) {
+  return useIssueMutation(buildingId, issueId, ({ index, done }: { index: number; done: boolean }) =>
+    api.issues.tickChecklist(buildingId, issueId, index, { done }),
+  );
+}

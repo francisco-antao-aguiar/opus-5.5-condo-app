@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../../api/client';
 import { FormError } from '../../../components/Layout';
+import { confirm } from '../../../lib/confirm';
 import { errorMessage } from '../../../lib/errors';
 import Constants from 'expo-constants';
 import { API_URL } from '../../../api/config';
@@ -135,14 +136,16 @@ function PushSection({ userId }: { userId: string }) {
 /** Signed .ics feed of my confirmed bookings, shared to a calendar app. */
 function CalendarSection() {
   const { colors } = useTheme();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'share' | 'reset' | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [resetDone, setResetDone] = useState(false);
 
-  async function share() {
-    setBusy(true);
+  /** Share the current link (GET, revokes nothing) or a fresh one right after a reset. */
+  async function share(fresh?: string) {
+    setBusy('share');
     setError(null);
     try {
-      const { url } = await api.bookings.calendarLink();
+      const url = fresh ?? (await api.bookings.calendarLink()).url;
       const nav = typeof navigator !== 'undefined' ? (navigator as Partial<Navigator>) : undefined;
       if (Platform.OS === 'web' && !nav?.share) {
         // Desktop browsers: no share sheet — copy it instead.
@@ -154,7 +157,28 @@ function CalendarSection() {
     } catch (e) {
       setError(e);
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  async function reset() {
+    const ok = await confirm(
+      'Reset calendar link?',
+      'Every earlier link stops working: calendars already subscribed will stop updating and need the new link.',
+      'Reset link',
+    );
+    if (!ok) return;
+    setBusy('reset');
+    setError(null);
+    setResetDone(false);
+    try {
+      const { url } = await api.bookings.resetCalendarLink();
+      setResetDone(true);
+      setBusy(null);
+      await share(url);
+    } catch (e) {
+      setError(e);
+      setBusy(null);
     }
   }
 
@@ -166,7 +190,24 @@ function CalendarSection() {
           Subscribe to your confirmed bookings in Google Calendar, Apple Calendar or Outlook. Keep the link private.
         </Text>
         <FormError message={error ? errorMessage(error) : null} />
-        <Button title="Add bookings to my calendar" variant="secondary" onPress={() => void share()} loading={busy} />
+        {resetDone ? (
+          <Text style={{ color: colors.success, fontSize: 14 }}>New link created — old links no longer work.</Text>
+        ) : null}
+        <Button
+          title="Add bookings to my calendar"
+          variant="secondary"
+          onPress={() => void share()}
+          loading={busy === 'share'}
+          disabled={busy !== null}
+        />
+        <Button
+          title="Reset link"
+          variant="ghost"
+          onPress={() => void reset()}
+          loading={busy === 'reset'}
+          disabled={busy !== null}
+          accessibilityHint="Revokes earlier calendar links and creates a new one"
+        />
       </Card>
     </>
   );

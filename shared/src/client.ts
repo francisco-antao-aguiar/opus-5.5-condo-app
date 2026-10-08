@@ -23,6 +23,7 @@ import type {
   SaveCostEntryRequest,
   SaveMaintenancePlanRequest,
   ChangeIssueStatusRequest,
+  ChecklistTickRequest,
   CommentRequest,
   IssueDashboard,
   IssueDto,
@@ -390,6 +391,8 @@ export function createApiClient(config: ApiClientConfig) {
       cancel: (buildingId: UUID, bookingId: UUID, req: BookingDecisionRequest = {}) =>
         request<BookingDto>('POST', `${b(buildingId)}/bookings/${bookingId}/cancel`, req),
       calendarLink: () => request<CalendarLink>('GET', '/me/bookings/calendar-link'),
+      /** Revokes every calendar link handed out before (e.g. one shared by mistake) and returns a new one. */
+      resetCalendarLink: () => request<CalendarLink>('POST', '/me/bookings/calendar-link/reset'),
     },
 
     qr: {
@@ -423,6 +426,9 @@ export function createApiClient(config: ApiClientConfig) {
         request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/status`, req),
       comment: (buildingId: UUID, issueId: UUID, req: CommentRequest) =>
         request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/comments`, req),
+      /** Scheduled tasks: tick or untick checklist item `index`. 409 INVALID_STATE once resolved. */
+      tickChecklist: (buildingId: UUID, issueId: UUID, index: number, req: ChecklistTickRequest) =>
+        request<IssueDto>('PUT', `${b(buildingId)}/issues/${issueId}/checklist/${index}`, req),
       meToo: (buildingId: UUID, issueId: UUID) =>
         request<IssueDto>('POST', `${b(buildingId)}/issues/${issueId}/me-too`),
       withdrawMeToo: (buildingId: UUID, issueId: UUID) =>

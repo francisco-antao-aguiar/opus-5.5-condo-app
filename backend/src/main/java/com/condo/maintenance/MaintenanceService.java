@@ -234,7 +234,7 @@ public class MaintenanceService {
         Issue task = issues.save(Issue.scheduled(plan.getBuildingId(), building.nextIssueNumber(), plan.getAssetId(),
                 space.getId(), SpaceService.pathLabel(space, spacesById), plan.getTitle(),
                 SpaceService.effectiveVisibility(space, spacesById), plan.getCreatedByUserId(), plan.getId(), due,
-                now));
+                plan.getChecklist(), now));
         affected.save(new IssueAffected(task.getId(), plan.getCreatedByUserId(), IssueAffected.Kind.REPORTER, now));
         events.save(IssueEvent.of(task, plan.getCreatedByUserId(), IssueEventType.REPORTED,
                 "Scheduled maintenance, due " + due, now));

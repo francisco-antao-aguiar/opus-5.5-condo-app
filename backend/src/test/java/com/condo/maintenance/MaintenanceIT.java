@@ -141,4 +141,50 @@ class MaintenanceIT extends IssueTestSupport {
         deleteAs(admin, "/api/buildings/{b}/spaces/{s}", buildingId, unit1B.getId())
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SPACE_HAS_PLANS"));
     }
+
+    @Test
+    void theTaskKeepsItsOwnChecklistAndTicksAreSaved() throws Exception {
+        JsonNode plan = created(plan(roofLight, "Roof light check", Map.of("unit", "MONTH", "every", 1)));
+        String taskId = plan.get("openTaskId").asText();
+        String url = "/api/buildings/{b}/issues/{i}/checklist/{n}";
+
+        // Editing the plan afterwards doesn't rewrite the task's copy.
+        Map<String, Object> edited = plan(roofLight, "Roof light check", Map.of("unit", "MONTH", "every", 1));
+        edited.put("checklist", List.of("Something else"));
+        putAs(admin, edited, "/api/buildings/{b}/maintenance-plans/{p}", buildingId, plan.get("id").asText())
+                .andExpect(status().isOk());
+
+        getIssue(owner1B, taskId)
+                .andExpect(jsonPath("$.checklist.length()").value(2))
+                .andExpect(jsonPath("$.checklist[0].text").value("Check the cables"))
+                .andExpect(jsonPath("$.checklist[0].done").value(false))
+                .andExpect(jsonPath("$.me.canTickChecklist").value(false));
+        putAs(owner1B, Map.of("done", true), url, buildingId, taskId, 0).andExpect(status().isForbidden());
+
+        long version = body(getIssue(admin, taskId).andExpect(jsonPath("$.me.canTickChecklist").value(true)))
+                .get("version").asLong();
+        putAs(admin, Map.of("done", true), url, buildingId, taskId, 1)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checklist[1].done").value(true))
+                .andExpect(jsonPath("$.checklist[1].doneByName").value("Admin"))
+                .andExpect(jsonPath("$.checklist[1].doneAt").isNotEmpty())
+                .andExpect(jsonPath("$.checklist[0].done").value(false))
+                .andExpect(jsonPath("$.version").value(version + 1));
+        // Ticking twice changes nothing; unticking clears who did it.
+        putAs(admin, Map.of("done", true), url, buildingId, taskId, 1)
+                .andExpect(jsonPath("$.version").value(version + 1));
+        putAs(admin, Map.of("done", false), url, buildingId, taskId, 1)
+                .andExpect(jsonPath("$.checklist[1].done").value(false))
+                .andExpect(jsonPath("$.checklist[1].doneByName").isEmpty());
+        putAs(admin, Map.of("done", true), url, buildingId, taskId, 2).andExpect(status().isNotFound());
+        putAs(admin, Map.of(), url, buildingId, taskId, 0).andExpect(status().isBadRequest());
+
+        // A resolved task's checklist is frozen; ordinary issues have none.
+        changeStatus(admin, taskId, "RESOLVED", "Done").andExpect(status().isOk());
+        putAs(admin, Map.of("done", true), url, buildingId, taskId, 0)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("INVALID_STATE"));
+        String problem = reported(tenant1A, onAsset(roofLight, LIGHT_FLICKERING)).get("id").asText();
+        getIssue(admin, problem).andExpect(jsonPath("$.checklist.length()").value(0));
+        putAs(admin, Map.of("done", true), url, buildingId, problem, 0).andExpect(status().isNotFound());
+    }
 }

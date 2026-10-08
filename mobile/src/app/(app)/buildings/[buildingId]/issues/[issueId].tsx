@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { canDo, type IssueDto, type IssueStatus, type UUID } from '@condo/shared';
+import { ApiError, canDo, type IssueDto, type IssueStatus, type UUID } from '@condo/shared';
 import { CostsCard } from '../../../../../components/costs/CostsCard';
 import { formatLocalDate } from '../../../../../lib/time';
 import { AssetIcon } from '../../../../../components/assets/AssetParts';
@@ -14,6 +14,7 @@ import { QueryGate } from '../../../../../components/StateView';
 import { TextField } from '../../../../../components/TextField';
 import {
   useMaintenancePlan,
+  useTickChecklist,
   useMyPermissions,
   useAddIssuePhoto,
   useChangeIssueStatus,
@@ -162,14 +163,7 @@ function IssueDetail({ issue, refetch }: { issue: IssueDto; refetch: () => void 
             <Text style={{ color: colors.textMuted, fontSize: 14 }}>By: {plan.data.assigneeNote}</Text>
           ) : null}
           {plan.data?.description ? <Text style={{ color: colors.text, fontSize: 15 }}>{plan.data.description}</Text> : null}
-          {plan.data?.checklist.length ? (
-            <View style={{ gap: 4 }}>
-              <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase' }}>Checklist</Text>
-              {plan.data.checklist.map((item, i) => (
-                <Text key={i} style={{ color: colors.text, fontSize: 15 }}>☐ {item}</Text>
-              ))}
-            </View>
-          ) : null}
+          {issue.checklist.length ? <Checklist issue={issue} /> : null}
         </Card>
       ) : null}
 
@@ -285,6 +279,84 @@ function IssueDetail({ issue, refetch }: { issue: IssueDto; refetch: () => void 
   );
 }
 
+/**
+ * The task's own checklist (frozen copy of the plan's). Tappable while the task is open and I may
+ * triage it; each row is disabled while its request is in flight.
+ */
+function Checklist({ issue }: { issue: IssueDto }) {
+  const { colors } = useTheme();
+  const tick = useTickChecklist(issue.buildingId, issue.id);
+  const [pending, setPending] = useState<number | null>(null);
+  const editable = issue.me.canTickChecklist;
+  const done = issue.checklist.filter((c) => c.done).length;
+  const code = tick.error instanceof ApiError ? tick.error.problem.code : undefined;
+  const message =
+    code === 'CONFLICT'
+      ? 'Someone else ticked this at the same moment — showing the latest.'
+      : code === 'INVALID_STATE'
+        ? 'This task is closed, so its checklist can no longer change.'
+        : tick.error
+          ? errorMessage(tick.error)
+          : null;
+
+  return (
+    <View style={{ gap: 4 }}>
+      <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', textTransform: 'uppercase' }}>
+        {`Checklist · ${done}/${issue.checklist.length} done`}
+      </Text>
+      {message ? <FormError message={message} /> : null}
+      {issue.checklist.map((item) => {
+        const busy = pending === item.index;
+        const row = (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44, opacity: busy ? 0.5 : 1 }}>
+            <View
+              style={[
+                styles.box,
+                { borderColor: item.done ? colors.success : colors.border, backgroundColor: item.done ? colors.success : 'transparent' },
+              ]}
+            >
+              {item.done ? <Text style={{ color: '#fff', fontWeight: '800' }}>✓</Text> : null}
+            </View>
+            <View style={styles.flex}>
+              <Text
+                style={{
+                  color: item.done ? colors.textMuted : colors.text,
+                  fontSize: 16,
+                  textDecorationLine: item.done ? 'line-through' : 'none',
+                }}
+              >
+                {item.text}
+              </Text>
+              {item.done && (item.doneByName || item.doneAt) ? (
+                <Text style={{ color: colors.success, fontSize: 13 }}>
+                  ✓ {[item.doneByName, item.doneAt ? formatDateTime(item.doneAt) : null].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        );
+        if (!editable) return <View key={item.index}>{row}</View>;
+        return (
+          <Pressable
+            key={item.index}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: item.done, disabled: busy }}
+            accessibilityLabel={item.text}
+            disabled={busy || pending !== null}
+            onPress={() => {
+              setPending(item.index);
+              tick.mutate({ index: item.index, done: !item.done }, { onSettled: () => setPending(null) });
+            }}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          >
+            {row}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function LinkToIssue({ buildingId, issueId, number }: { buildingId: UUID; issueId: UUID; number: number | null }) {
   const { colors } = useTheme();
   return (
@@ -306,4 +378,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
   flexBtn: { flex: 1, paddingHorizontal: spacing.sm },
   event: { gap: 2, paddingVertical: spacing.sm },
+  box: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

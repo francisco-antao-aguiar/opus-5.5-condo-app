@@ -627,6 +627,8 @@ export interface IssueCapabilities {
   canMerge: boolean;
   canChangeSharing: boolean;
   canAddPhoto: boolean;
+  /** Scheduled tasks only: open, has a checklist, and you run it. */
+  canTickChecklist: boolean;
 }
 
 export interface IssueDto extends IssueSummaryDto {
@@ -634,6 +636,20 @@ export interface IssueDto extends IssueSummaryDto {
   timeline: IssueEventDto[];
   photos: IssuePhotoDto[];
   me: IssueCapabilities;
+  /** Scheduled tasks: the plan's checklist as it was when the task was created; empty for reported issues. */
+  checklist: ChecklistItemDto[];
+}
+
+export interface ChecklistItemDto {
+  index: number;
+  text: string;
+  done: boolean;
+  doneByName: string | null;
+  doneAt: Instant | null;
+}
+
+export interface ChecklistTickRequest {
+  done: boolean;
 }
 
 /**

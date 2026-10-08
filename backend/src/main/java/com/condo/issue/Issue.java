@@ -1,14 +1,19 @@
 package com.condo.issue;
 
 import com.condo.common.persistence.BaseEntity;
+import com.condo.common.persistence.JsonConverters;
 import com.condo.space.Visibility;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.OptimisticLock;
 
@@ -97,6 +102,16 @@ public class Issue extends BaseEntity {
     @Column(name = "overdue_notified_at")
     private Instant overdueNotifiedAt;
 
+    /** Scheduled tasks: the plan's checklist when the task was created. */
+    @Convert(converter = JsonConverters.StringListJson.class)
+    @Column(name = "checklist", nullable = false, length = 8000)
+    private List<String> checklist = List.of();
+
+    /** Ticked items of {@link #checklist}. Ticking bumps the version, so concurrent ticks can't lose each other. */
+    @Convert(converter = JsonConverters.ChecklistTicksJson.class)
+    @Column(name = "checklist_done", nullable = false, length = 8000)
+    private List<ChecklistTick> checklistDone = List.of();
+
     protected Issue() {
     }
 
@@ -126,12 +141,14 @@ public class Issue extends BaseEntity {
      * (without a normalized form, so it never takes part in duplicate detection or the "Other" review).
      */
     public static Issue scheduled(UUID buildingId, int number, UUID assetId, UUID spaceId, String locationLabel,
-            String title, Visibility visibility, UUID creatorUserId, UUID planId, LocalDate dueOn, Instant now) {
+            String title, Visibility visibility, UUID creatorUserId, UUID planId, LocalDate dueOn,
+            List<String> checklist, Instant now) {
         Issue issue = new Issue(buildingId, number, assetId, spaceId, locationLabel, null, title, null, null,
                 visibility, false, creatorUserId, null, now);
         issue.kind = IssueKind.SCHEDULED;
         issue.maintenancePlanId = planId;
         issue.dueOn = dueOn;
+        issue.checklist = List.copyOf(checklist);
         return issue;
     }
 
@@ -141,6 +158,34 @@ public class Issue extends BaseEntity {
 
     public boolean isOverdueOn(LocalDate today) {
         return isScheduled() && isOpen() && dueOn != null && dueOn.isBefore(today);
+    }
+
+    /** Ticks or unticks one checklist item; returns false when nothing changed. */
+    public boolean tick(int index, boolean done, UUID by, Instant now) {
+        if (index < 0 || index >= checklist.size()) {
+            throw new IndexOutOfBoundsException(index);
+        }
+        boolean isDone = checklistDone.stream().anyMatch(t -> t.index() == index);
+        if (isDone == done) {
+            return false;
+        }
+        List<ChecklistTick> ticks = new ArrayList<>(checklistDone);
+        if (done) {
+            ticks.add(new ChecklistTick(index, by, now.toString()));
+            ticks.sort(Comparator.comparingInt(ChecklistTick::index));
+        } else {
+            ticks.removeIf(t -> t.index() == index);
+        }
+        checklistDone = List.copyOf(ticks);
+        return true;
+    }
+
+    public List<String> getChecklist() {
+        return checklist;
+    }
+
+    public List<ChecklistTick> getChecklistDone() {
+        return checklistDone;
     }
 
     public void markOverdueNotified(Instant now) {

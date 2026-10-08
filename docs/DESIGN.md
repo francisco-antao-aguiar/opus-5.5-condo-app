@@ -141,7 +141,8 @@ Decided on 2026-10-06: maintenance tasks are issues, every booking is reviewed b
 * A generic `NotificationRequest` event next to `IssueActivity` carries task and booking notifications (`TASK_DUE`, `TASK_OVERDUE`, `BOOKING_REQUESTED`, `BOOKING_REVIEW_REMINDER`, `BOOKING_CONFIRMED`, `BOOKING_REJECTED`, `BOOKING_CANCELLED`) through the same store-then-push path.
 * Jobs: `MaintenanceJob` (hourly: generate due tasks, one transaction per plan; flag overdue tasks once) and `BookingJob` (every 10 min: 48 h review reminder, reject requests nobody reviewed before they start, cancel future bookings of members whose access ended). All idempotent; a distributed job lock is needed once the backend runs on several nodes.
 * Deletion guards: archiving an asset pauses its plans; deleting a space fails with `SPACE_HAS_PLANS` / `SPACE_HAS_BOOKINGS` while plans or upcoming bookings live in its subtree.
-* Known gaps: checklist ticks on a task aren't stored; calendar links can't be revoked individually (they expire after a year).
+* Each task keeps its own copy of the plan's checklist (V12), so editing a plan never rewrites past tasks. Ticks record who and when, can be changed by whoever triages the task while it is open, and bump the issue version (concurrent ticks get a 409, never a lost update). They stay out of the timeline.
+* Calendar links sign the user's `calendar_key` (V12); resetting it revokes every link handed out before. Links also expire after a year.
 
 ### Tree storage strategy — adjacency list + materialized path
 
@@ -287,6 +288,7 @@ Paths below are relative to `/api/buildings/{buildingId}` unless they start with
 | POST, PUT | `/maintenance-plans`, `/maintenance-plans/{id}` | `MAINTENANCE_MANAGE` on the target space; generates any task already due |
 | POST | `/maintenance-plans/{id}/pause`, `/resume` | `MAINTENANCE_MANAGE`; resuming schedules from today (no back-fill) |
 | POST | `/maintenance-plans/preview` | `MAINTENANCE_VIEW` — next dates + human-readable recurrence |
+| PUT | `/issues/{issueId}/checklist/{index}` | scheduled tasks: whoever triages it, while open — `{done}` |
 | GET | `/issues?kind=REPORTED\|SCHEDULED` | as issues; the dashboard adds `overdue` and `dueThisWeek` |
 | GET | `/costs?from&to&category&assetId&issueId&maintenancePlanId&page&size` | `COST_VIEW` (+ privacy of the anchor) |
 | GET | `/costs/summary?groupBy=month\|category\|asset\|space&…filters` | `COST_VIEW` — totals per currency, never mixed |
@@ -303,6 +305,7 @@ Paths below are relative to `/api/buildings/{buildingId}` unless they start with
 | POST | `/bookings/{id}/approve`, `/reject` | `BOOKING_MANAGE` |
 | POST | `/bookings/{id}/cancel` | requester (pending anytime, confirmed until the cutoff) or `BOOKING_MANAGE` |
 | GET | `/me/bookings/calendar-link` | authenticated — signed iCalendar URL valid for a year |
+| POST | `/me/bookings/calendar-link/reset` | authenticated — revokes all earlier links, returns a new one |
 | GET | `/files/calendar/{userId}.ics?exp&sig` | signed link — your confirmed bookings |
 
 ## 4. Assumptions

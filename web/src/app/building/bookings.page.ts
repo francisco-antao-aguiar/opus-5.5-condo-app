@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { BookingDto, BookingPolicyDto, SpaceDto, UUID } from '@condo/shared';
 import { ApiService } from '../core/api.service';
 import { describeError, ErrorText } from '../core/errors';
+import { ConfirmService } from '../core/confirm.service';
 import { ToastService } from '../core/toast.service';
 import { BOOKING_STATUS_BADGE, BOOKING_STATUS_LABELS, bookingError, sortForQueue } from '../shared/bookings';
 import { copyText } from '../shared/clipboard';
@@ -26,6 +27,7 @@ export class BookingsPage {
   protected readonly ctx = inject(BuildingContext);
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
   private readonly router = inject(Router);
 
   /** ?tab= and ?space= (component input binding). */
@@ -60,6 +62,9 @@ export class BookingsPage {
   protected readonly error = signal<ErrorText | null>(null);
   protected readonly busyId = signal<UUID | null>(null);
   protected readonly decision = signal<Decision | null>(null);
+  /** Shown after "Copy calendar link" / "Reset link" so it can be copied by hand too. */
+  protected readonly calendarUrl = signal<string | null>(null);
+  protected readonly resettingLink = signal(false);
   protected readonly editingPolicy = signal<{ space: SpaceDto; policy: BookingPolicyDto | null } | null>(null);
 
   protected readonly pendingCount = computed(() => this.queue().filter((b) => b.status === 'PENDING').length);
@@ -170,10 +175,37 @@ export class BookingsPage {
   protected async copyCalendarLink(): Promise<void> {
     try {
       const { url } = await this.api.client.bookings.calendarLink();
+      this.calendarUrl.set(url);
       if (await copyText(url)) this.toast.success('Calendar link copied', 'Add it to your calendar app as a subscription (“From URL”).');
-      else this.toast.info('Copy this link into your calendar app', url);
     } catch (e) {
       this.toast.error(e);
+    }
+  }
+
+  protected async copyUrl(url: string): Promise<void> {
+    if (await copyText(url)) this.toast.success('Calendar link copied');
+    else this.toast.info("Couldn't copy automatically — select the link and copy it.");
+  }
+
+  /** Revokes every earlier link (e.g. one that leaked) and shows the new one. */
+  protected async resetCalendarLink(): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: 'Reset your calendar link?',
+      message:
+        'All earlier links stop working immediately: calendars already subscribed will stop updating until you add the new link to them.',
+      confirmText: 'Reset link',
+      danger: true,
+    });
+    if (!ok) return;
+    this.resettingLink.set(true);
+    try {
+      const { url } = await this.api.client.bookings.resetCalendarLink();
+      this.calendarUrl.set(url);
+      this.toast.success('New calendar link created', 'Old links no longer work. Re-subscribe your calendars with the new one.');
+    } catch (e) {
+      this.toast.error(e);
+    } finally {
+      this.resettingLink.set(false);
     }
   }
 

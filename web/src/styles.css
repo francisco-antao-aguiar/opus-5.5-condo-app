@@ -1919,6 +1919,25 @@ textarea {
 .checklist .check {
   margin: 0.15rem 0;
 }
+.checklist li.done > .check span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.checklist li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.checklist-head {
+  font-size: 0.95rem;
+  margin: 0.75rem 0 0.25rem;
+}
+.calendar-link input[type='text'] {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  min-width: 0;
+}
 .checklist-line {
   margin-bottom: 0.35rem;
 }

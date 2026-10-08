@@ -198,6 +198,15 @@ class BookingIT extends IssueTestSupport {
         mvc.perform(get(link.getRawPath() + "?" + link.getRawQuery().replaceAll("sig=[^&]+", "sig=bogus")))
                 .andExpect(status().isForbidden());
 
+        // Asking again gives a link that works alongside the first; resetting revokes both.
+        URI again = URI.create(body(getAs(tenant1A, "/api/me/bookings/calendar-link")).get("url").asText());
+        mvc.perform(get(again.getRawPath() + "?" + again.getRawQuery())).andExpect(status().isOk());
+        URI fresh = URI.create(body(postAs(tenant1A, null, "/api/me/bookings/calendar-link/reset")
+                .andExpect(status().isOk())).get("url").asText());
+        mvc.perform(get(link.getRawPath() + "?" + link.getRawQuery())).andExpect(status().isForbidden());
+        mvc.perform(get(again.getRawPath() + "?" + again.getRawQuery())).andExpect(status().isForbidden());
+        mvc.perform(get(fresh.getRawPath() + "?" + fresh.getRawQuery())).andExpect(status().isOk());
+
         // Upcoming bookings protect their space.
         deleteAs(admin, "/api/buildings/{b}/spaces/{s}", buildingId, room)
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SPACE_HAS_BOOKINGS"));
