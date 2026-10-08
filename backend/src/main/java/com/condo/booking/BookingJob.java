@@ -2,12 +2,13 @@ package com.condo.booking;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
  * Every 10 minutes: remind admins about requests waiting too long, expire unreviewed requests whose time came,
- * and cancel future bookings of members whose access ended. Idempotent; single-node assumption as other jobs.
+ * and cancel future bookings of members whose access ended. Idempotent, and locked to one node per tick.
  */
 @Component
 public class BookingJob {
@@ -20,7 +21,13 @@ public class BookingJob {
         this.bookings = bookings;
     }
 
+    /** Every 10 minutes, on one node only. */
     @Scheduled(cron = "${app.bookings.jobs-cron}")
+    @SchedulerLock(name = "booking-job", lockAtMostFor = "PT9M", lockAtLeastFor = "PT30S")
+    public void scheduled() {
+        run();
+    }
+
     public void run() {
         int reminded = bookings.remindReviewers();
         int expired = bookings.expireUnreviewed();
